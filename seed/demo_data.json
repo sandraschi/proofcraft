@@ -1,0 +1,161 @@
+{
+  "problems": [
+    {
+      "id": "prob-anytime-experts",
+      "title": "Anytime Regret with n Experts Matching Fixed-Horizon Constant",
+      "domain": "Online Learning",
+      "statement": "Design a horizon-oblivious algorithm for prediction with expert advice over n experts and bounded losses in [0,1]^n whose regret satisfies R_t <= (1 + o(1)) * sqrt(t * ln(n) / 2) simultaneously for all t >= 1.",
+      "status": "Verified",
+      "max_calls": 200,
+      "calls_used": 84,
+      "rounds_completed": 3,
+      "directions": [
+        {
+          "id": "dir-geom-doubling",
+          "name": "Geometric Grid + Active Window Retirement",
+          "claim": "Maintain O(eps^-1 log delta^-1) active MW instances on grid H^m = (1+eps)^m, waking at floor(delta * H^m) and retiring at floor(H^m).",
+          "status": "Proved"
+        },
+        {
+          "id": "dir-adaptive-eta",
+          "name": "Time-Varying Learning Rate Single MW",
+          "claim": "Use a single MW instance with eta_t = sqrt(ln n / (2t)) without restarts.",
+          "status": "Excluded"
+        }
+      ],
+      "attempts": [
+        {
+          "id": "att-r1-p1",
+          "round": 1,
+          "prover": "Prover-1",
+          "direction_id": "dir-adaptive-eta",
+          "method": "Direct potential telescoping with eta_t = sqrt(ln n / (2t))",
+          "summary": "Attempted to bound cumulative mixability gap directly via Abel summation.",
+          "draft_markdown": "### Draft R1-P1\nAssume eta_t = sqrt(ln n / (2t)). By standard Hedge lemma, instantaneous regret is bounded by eta_t / 8 + KL divergence term. Summing over t yields sqrt(t ln n / 2) + O(sqrt(t)).",
+          "single_verdict": "Fail",
+          "single_objection": "KL divergence telescopes cleanly only when eta_t is non-increasing AND weights are not penalized by shifting reference distribution; missing factor of 2 in non-monotonic potential term.",
+          "comp_verdict": "Fail",
+          "comp_objection": "Adversarial counterexample on n=2 shows non-restarted adaptive eta_t incurs strictly worse leading constant than sqrt(t ln n / 2) under oscillating loss switches."
+        },
+        {
+          "id": "att-r2-p1",
+          "round": 2,
+          "prover": "Prover-1",
+          "direction_id": "dir-geom-doubling",
+          "method": "Geometric horizon grid H^m = (1+eps)^m with master Hedge aggregation",
+          "summary": "Combined fixed-horizon MW instances via master MW, waking at floor(delta H^m) and retiring after floor(H^m).",
+          "draft_markdown": "### Draft R2-P1\nLet H^m = (1+eps)^m. Wake instance m at t_start = floor(delta H^m) and retire at floor(H^m). At most O(eps^-1 log delta^-1) instances are active simultaneously. Master Hedge tracks active pool with regret sqrt(t ln(pool_size)).",
+          "single_verdict": "Fail",
+          "single_objection": "Prefix [1, floor(delta H^m)) is uncovered when instance m wakes; the master must account for prior regret accumulated before t_start.",
+          "comp_verdict": "Fail",
+          "comp_objection": "Birth of new instances requires redistributing probability mass from existing instances; mass-allocation tax is not bounded in Section 2."
+        },
+        {
+          "id": "att-r3-p1",
+          "round": 3,
+          "prover": "Prover-1",
+          "direction_id": "dir-geom-doubling",
+          "method": "Recursive prefix coverage + bounded mass-allocation tax on sleeping-expert master",
+          "summary": "Covers prefix [1, floor(delta H^m)) recursively (geometric series 1 + sqrt(delta) + delta + ...) and bounds mass-allocation tax via eps = sqrt(ln ln n / ln n), delta = eps^3.",
+          "draft_markdown": "### Theorem (Anytime Regret Matching Fixed-Horizon Constant)\nFor any n >= 3 and any loss sequence in [0,1]^n, running geometric-grid MW instances H^m = (1+eps)^m woken at floor(delta H^m) and retired at floor(H^m) under a sleeping-experts master MW with eps = sqrt(ln ln n / ln n) and delta = eps^3 yields R_t <= (1 + O(sqrt(ln ln n / ln n))) * sqrt(t ln n / 2) for all t >= 1.\n\n#### Proof\n1. Active pool bound (Lemma L1): At any t, active m satisfy delta H^m <= t <= H^m, so at most ceil(log_{1+eps}(1/delta)) = O(eps^-1 log(1/delta)) instances are active.\n2. Prefix recursion (Lemma L2): Uncovered prefix before floor(delta H^m) is covered by earlier grid scales, contributing geometric factor sum_{k>=0} delta^{k/2} = 1 + O(sqrt(delta)).\n3. Mass-allocation tax: Each wake event shifts at most O(eps^2) mass; summing over O(eps^-1 log(1/delta)) births per lifetime adds O(sqrt(ln ln n / ln n)) relative overhead.",
+          "single_verdict": "Pass",
+          "single_objection": "All steps justified; boundary cases t < 1/delta and n -> infinity checked.",
+          "comp_verdict": "Pass",
+          "comp_objection": "No shared blind spots; strictly stronger and cleaner than R3-P2."
+        }
+      ],
+      "ledger": [
+        {
+          "id": "lem-active-pool",
+          "kind": "VerifiedLemma",
+          "title": "L1: Bounded Active Instance Pool on Geometric Grid",
+          "statement": "For H^m = (1+eps)^m with wake time floor(delta H^m) and retirement floor(H^m), at most O(eps^-1 ln(1/delta)) instances are active at any round t >= 1.",
+          "proof_sketch": "If m is active at t, then delta (1+eps)^m <= t <= (1+eps)^m, hence m lies in [log_{1+eps}(t), log_{1+eps}(t/delta)], an interval of width ln(1/delta)/ln(1+eps) = O(eps^-1 ln(1/delta)).",
+          "isolated_verified": true,
+          "source_attempt": "att-r2-p1"
+        },
+        {
+          "id": "lem-prefix-recursion",
+          "kind": "VerifiedLemma",
+          "title": "L2: Geometric Prefix Recursion Bound",
+          "statement": "Covering the pre-wake prefix [1, floor(delta H^m)) recursively across earlier grid blocks contributes at most a multiplicative factor 1 / (1 - sqrt(delta)) = 1 + O(sqrt(delta)).",
+          "proof_sketch": "Each prior block ends at delta H^m, so its worst-case regret scales as sqrt(delta H^m ln n / 2). Summing the geometric series sum_{k>=0} delta^{k/2} converges to 1/(1 - sqrt(delta)).",
+          "isolated_verified": true,
+          "source_attempt": "att-r3-p1"
+        },
+        {
+          "id": "dead-single-eta",
+          "kind": "DeadEnd",
+          "title": "D1: Non-restarted single MW with eta_t = sqrt(ln n / (2t))",
+          "statement": "Excluded: cannot achieve leading constant 1/sqrt(2) without resets under adversarial oscillating losses.",
+          "proof_sketch": "Verified counterexample constructed in Round 1 comparative audit.",
+          "isolated_verified": true,
+          "source_attempt": "att-r1-p1"
+        }
+      ],
+      "advisor_notes": [
+        {
+          "round": 1,
+          "observation": "Prover-1 omitted explicit handling of non-increasing learning-rate KL penalty terms.",
+          "instruction_delta": "Require all provers using time-varying learning rates to write the exact telescoping KL remainder term explicitly."
+        },
+        {
+          "round": 2,
+          "observation": "Both Round 2 drafts assumed newly woken experts start with zero prior regret without accounting for mass-allocation tax.",
+          "instruction_delta": "Mandate explicit accounting of probability-mass reallocation whenever new instances enter a master Hedge pool."
+        }
+      ]
+    },
+    {
+      "id": "prob-inverse-linear-opt",
+      "title": "Online Inverse Linear Optimization with O(d) Uniform Regret",
+      "domain": "Online Optimization",
+      "statement": "Find a deterministic, proper, anytime algorithm for online inverse linear optimization in R^d achieving cumulative shortfall R_T = O(d) uniformly in T at O(d^2) arithmetic per round.",
+      "status": "InProgress",
+      "max_calls": 250,
+      "calls_used": 32,
+      "rounds_completed": 1,
+      "directions": [
+        {
+          "id": "dir-trace-potential",
+          "name": "Self-Normalized Variable Metric with tr(H_t^-1/2) Potential",
+          "claim": "Replace log det(H_t) potential (which leaks d ln T) with tr(H_t^-1/2) under self-normalized rank-one updates.",
+          "status": "Active"
+        }
+      ],
+      "attempts": [
+        {
+          "id": "att-ilo-r1",
+          "round": 1,
+          "prover": "Prover-1",
+          "direction_id": "dir-trace-potential",
+          "method": "Rank-one metric update normalized by dual-metric norm s_t = ||g_t||_{H_t^-1}",
+          "summary": "Showed tr(H_t^-1/2) starts at d and decreases by >= (tau/4) * s_t^2 per round.",
+          "draft_markdown": "### Draft ILO-R1\nLet H_{t+1} = H_t + tau * (g_t g_t^T) / ||g_t||_{H_t^-1}^2. Using operator monotonicity of x -> -x^{-1/2}, we bound the trace drop per step.",
+          "single_verdict": "Pass",
+          "single_objection": "Step-size coupling alpha = Theta(1/d) verified; waiting for comparative check.",
+          "comp_verdict": "Pending",
+          "comp_objection": "Awaiting Round 1 comparative verifier."
+        }
+      ],
+      "ledger": [
+        {
+          "id": "lem-trace-drop",
+          "kind": "VerifiedLemma",
+          "title": "L1: Self-Normalized Trace-Power Potential Drop",
+          "statement": "Under H_{t+1} = H_t + tau * u_t u_t^T with ||u_t||_{H_t^-1} = 1, tr(H_t^-1/2) - tr(H_{t+1}^-1/2) >= (tau/4) for tau <= 1/2.",
+          "proof_sketch": "Follows from Sherman-Morrison inversion and concavity of t -> (1 + t)^(-1/2) on [0, 1/2].",
+          "isolated_verified": true,
+          "source_attempt": "att-ilo-r1"
+        }
+      ],
+      "advisor_notes": [
+        {
+          "round": 1,
+          "observation": "Initial metric normalization constants were left implicit in early scratchpad.",
+          "instruction_delta": "State explicit constants for tau and alpha in terms of dimension d."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+target/
+dist/
+*.exe
+*.zip
+*.mcpb
+*.pdb
+*.bak
+*.bak.*
+.env
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
