@@ -130,6 +130,8 @@ struct ProofCraftApp {
     new_dir_name: String,
     new_dir_claim: String,
     new_arxiv_id: String,
+    import_url: String,
+    anim_playing: bool,
     lean_code: String,
     lean_output: String,
     lean_label: String,
@@ -182,6 +184,8 @@ impl ProofCraftApp {
             new_dir_name: String::new(),
             new_dir_claim: String::new(),
             new_arxiv_id: String::new(),
+            import_url: String::new(),
+            anim_playing: false,
             lean_code: "theorem sanity : 1 + 1 = 2 := rfl".to_string(),
             lean_output: String::new(),
             lean_label,
@@ -579,6 +583,8 @@ impl eframe::App for ProofCraftApp {
                     &mut self.selected_problem_id,
                     &mut self.active_tab,
                     self.round_running,
+                    &mut self.import_url,
+                    &mut self.status_msg,
                 ),
                 MainTab::Help => render_help(ui, &pal, &mut self.help_tab),
                 MainTab::Settings => render_settings(
@@ -609,7 +615,13 @@ impl eframe::App for ProofCraftApp {
                             &self.store,
                             &mut self.status_msg,
                         ),
-                        MainTab::Rounds => render_rounds(ui, &pal, &d),
+                        MainTab::Rounds => render_rounds(
+                            ui,
+                            &pal,
+                            &d,
+                            self.round_running,
+                            &mut self.anim_playing,
+                        ),
                         MainTab::Ledger => render_ledger(
                             ui,
                             &pal,
@@ -765,9 +777,20 @@ mod tests {
 
             let mut sel_pid = detail.problem.id.clone();
             let mut active_tab = MainTab::Kanban;
+            let mut import_url = String::new();
+            let mut anim_playing = true;
 
             let mut full_output = ctx.run_ui(egui::RawInput::default(), |ui| {
-                render_kanban(ui, &pal, &store, &mut sel_pid, &mut active_tab, false);
+                render_kanban(
+                    ui,
+                    &pal,
+                    &store,
+                    &mut sel_pid,
+                    &mut active_tab,
+                    false,
+                    &mut import_url,
+                    &mut status_msg,
+                );
                 render_workspace(
                     ui,
                     &pal,
@@ -778,7 +801,7 @@ mod tests {
                     &store,
                     &mut status_msg,
                 );
-                render_rounds(ui, &pal, &detail);
+                render_rounds(ui, &pal, &detail, false, &mut anim_playing);
                 render_ledger(
                     ui,
                     &pal,

@@ -639,6 +639,63 @@ fn help_lean_example_induction_passes_real_lean4() {
 }
 
 #[test]
+fn problem_packs_load_warmup_and_erdos_problems() {
+    use crate::importer::{load_pack, ProblemPack};
+
+    let store = ProofStore::open_in_memory().expect("db");
+    let n1 = load_pack(&store, ProblemPack::LeanWarmup).expect("warmup");
+    assert_eq!(n1, 3);
+    let n2 = load_pack(&store, ProblemPack::ErdosCombinatorics).expect("erdos");
+    assert_eq!(n2, 2);
+    let all = store.list_problems().expect("list");
+    assert_eq!(all.len(), 5);
+    assert!(all.iter().all(|p| !p.is_demo));
+}
+
+#[test]
+fn web_problem_parser_handles_html_and_raw_lean() {
+    use crate::importer::{parse_web_problem_page, strip_html_tags};
+
+    assert_eq!(strip_html_tags("<p>Hello <b>world</b></p>"), "Hello world");
+    let (t1, d1, s1) = parse_web_problem_page(
+        "https://erdosproblems.com/42",
+        "<html><head><title>Erdos Problem #42</title></head><body><p>Sidon sets</p></body></html>",
+    );
+    assert_eq!(t1, "Erdos Problem #42");
+    assert_eq!(d1, "Erdos Problems");
+    assert!(s1.contains("Sidon sets"));
+
+    let (t2, d2, _) = parse_web_problem_page(
+        "https://example.org/imo_1988.lean",
+        "-- IMO 1988 P6\ntheorem imo : 1 = 1 := rfl",
+    );
+    assert_eq!(t2, "IMO 1988 P6");
+    assert_eq!(d2, "Lean 4 Benchmark");
+}
+
+#[test]
+fn export_lake_project_writes_valid_lean_files() {
+    let store = ProofStore::open_in_memory().expect("db");
+    store.load_embedded_seed().expect("seed");
+    let tmp = std::env::temp_dir().join(format!("pc_lake_{}", uuid::Uuid::new_v4()));
+    let count = store
+        .export_lake_project("prob-anytime-experts", &tmp)
+        .expect("export lake");
+    assert_eq!(count, 1);
+    assert!(tmp.join("lakefile.toml").is_file());
+    assert!(tmp.join("lean-toolchain").is_file());
+    assert!(tmp.join("Main.lean").is_file());
+    let lemmas = std::fs::read_to_string(tmp.join("VerifiedLemmas.lean")).expect("read");
+    let chk = crate::lean::check_lean_snippet(&lemmas);
+    assert!(
+        chk.passed,
+        "exported VerifiedLemmas.lean failed: {}",
+        chk.stderr
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
 fn dispatch_add_direction_and_export_manuscript() {
     let store = ProofStore::open_in_memory().expect("db");
     store.load_embedded_seed().expect("seed");

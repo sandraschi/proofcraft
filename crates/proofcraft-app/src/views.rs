@@ -112,6 +112,8 @@ pub fn render_workspace(
         "Budget: {} / {} calls",
         detail.problem.calls_used, detail.problem.max_calls
     )));
+    ui.add_space(6.0);
+    render_telemetry_chart(ui, pal, detail);
     ui.add_space(10.0);
 
     egui::Frame::new()
@@ -226,6 +228,8 @@ pub fn render_kanban(
     selected_problem_id: &mut String,
     active_tab: &mut MainTab,
     round_running: bool,
+    import_url: &mut String,
+    status_msg: &mut String,
 ) {
     ui.heading(RichText::new("Proof Discovery Kanban").color(pal.text));
     ui.label(
@@ -234,6 +238,51 @@ pub fn render_kanban(
         )
         .color(pal.muted),
     );
+    ui.add_space(6.0);
+    egui::Frame::new()
+        .fill(pal.card)
+        .stroke(Stroke::new(1.0, pal.border))
+        .corner_radius(6.0)
+        .inner_margin(8.0)
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("Import Online:").strong().color(pal.accent));
+                ui.add(
+                    egui::TextEdit::singleline(import_url)
+                        .hint_text("arXiv ID/URL, erdosproblems.com/..., or .lean URL")
+                        .desired_width(300.0),
+                );
+                if ui.button("Import Problem").clicked() {
+                    match proofcraft_core::importer::import_problem_from_url(store, import_url) {
+                        Ok(p) => {
+                            *selected_problem_id = p.id.clone();
+                            *status_msg = format!("Imported: {}", p.title);
+                            import_url.clear();
+                        }
+                        Err(e) => *status_msg = format!("Import error: {e}"),
+                    }
+                }
+                ui.separator();
+                ui.label(RichText::new("Packs:").strong().color(pal.text));
+                for pack in proofcraft_core::importer::ProblemPack::ALL {
+                    let short = match pack {
+                        proofcraft_core::importer::ProblemPack::LeanWarmup => "+ Lean Warmup",
+                        proofcraft_core::importer::ProblemPack::ErdosCombinatorics => {
+                            "+ Erdos Pack"
+                        }
+                        proofcraft_core::importer::ProblemPack::CogenticPaper => "+ Cogentic Demo",
+                    };
+                    if ui.small_button(short).clicked() {
+                        match proofcraft_core::importer::load_pack(store, pack) {
+                            Ok(n) => {
+                                *status_msg = format!("Loaded {n} problems from {}", pack.id())
+                            }
+                            Err(e) => *status_msg = format!("Pack error: {e}"),
+                        }
+                    }
+                }
+            });
+        });
     ui.add_space(8.0);
 
     let problems = store.list_problems().unwrap_or_default();
@@ -344,12 +393,30 @@ pub fn render_kanban(
     });
 }
 
-pub fn render_rounds(ui: &mut egui::Ui, pal: &Palette, detail: &ProblemDetail) {
-    ui.heading(RichText::new("Rounds & Two-Tier Adversarial Verification").color(pal.text));
+pub fn render_rounds(
+    ui: &mut egui::Ui,
+    pal: &Palette,
+    detail: &ProblemDetail,
+    round_running: bool,
+    anim_playing: &mut bool,
+) {
+    ui.horizontal(|ui| {
+        ui.heading(RichText::new("Rounds & Two-Tier Adversarial Verification").color(pal.text));
+        let label = if *anim_playing {
+            "Pause Loop Animation"
+        } else {
+            "Play Loop Animation"
+        };
+        if ui.button(label).clicked() {
+            *anim_playing = !*anim_playing;
+        }
+    });
     ui.label(
         RichText::new("Every candidate draft must pass BOTH the Individual Verifier and the Cross-Draft Comparative Verifier.")
             .color(pal.muted),
     );
+    ui.add_space(6.0);
+    render_pipeline_animation(ui, pal, round_running || *anim_playing);
     ui.add_space(8.0);
 
     if detail.attempts.is_empty() {
@@ -594,6 +661,16 @@ pub fn render_manuscript(
                 }
             }
         }
+        if ui.button("Export Lake Project").clicked() {
+            let dir_name = format!("{problem_id}_lake");
+            match store.export_lake_project(problem_id, std::path::Path::new(&dir_name)) {
+                Ok(n) => {
+                    *status_msg =
+                        format!("Exported Lake project to {dir_name}/ ({n} Lean-verified lemmas)");
+                }
+                Err(e) => *status_msg = format!("Lake export error: {e}"),
+            }
+        }
     });
     ui.add_space(6.0);
     let fmt = if *export_tex { "tex" } else { "md" };
@@ -818,4 +895,192 @@ pub fn render_settings(
             }
         });
     });
+}
+
+fn render_pipeline_animation(ui: &mut egui::Ui, pal: &Palette, active: bool) {
+    let stages = [
+        "1. Orchestrator",
+        "2. Summarizers",
+        "3. Provers",
+        "4. Single Verifier",
+        "5. Comp. Verifier",
+        "6. Ledger Auditor",
+        "7. Lean 4 Gate",
+        "8. Process Advisor",
+    ];
+    let captions = [
+        "Allocates prover slots across competing directions (no math opinion).",
+        "Writes independent per-prover briefings from Record + Verified Ledger.",
+        "Drafts candidate proofs concurrently (API) or queued (local 4090).",
+        "Adversarial pass #1: assumes every step & citation is false until proven.",
+        "Adversarial pass #2: reads all drafts side-by-side for shared blind spots.",
+        "Extracts partial lemmas from failed drafts and re-verifies in isolation.",
+        "Runs `lean --stdin` / Lake and rejects any `sorry` or `admit`.",
+        "Updates standing prover/verifier rigor instructions for the next round.",
+    ];
+
+    let time = if active {
+        ui.ctx().request_repaint();
+        ui.input(|i| i.time)
+    } else {
+        0.0
+    };
+    let active_idx = if active {
+        ((time * 1.4) as usize) % stages.len()
+    } else {
+        0
+    };
+    let pulse_t = if active {
+        ((time * 1.4).fract()) as f32
+    } else {
+        0.0
+    };
+
+    egui::Frame::new()
+        .fill(pal.card)
+        .stroke(Stroke::new(1.0, pal.border))
+        .corner_radius(6.0)
+        .inner_margin(8.0)
+        .show(ui, |ui| {
+            let desired = egui::vec2(ui.available_width().max(300.0), 86.0);
+            let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
+            let painter = ui.painter_at(rect);
+            let n = stages.len();
+            let step_w = rect.width() / n as f32;
+            let cy = rect.center().y - 6.0;
+
+            for i in 0..(n - 1) {
+                let x1 = rect.left() + step_w * (i as f32 + 0.5) + 34.0;
+                let x2 = rect.left() + step_w * ((i + 1) as f32 + 0.5) - 34.0;
+                if x2 > x1 {
+                    let col = if active && i == active_idx {
+                        pal.pass
+                    } else {
+                        pal.border
+                    };
+                    painter.line_segment(
+                        [egui::pos2(x1, cy), egui::pos2(x2, cy)],
+                        Stroke::new(2.0, col),
+                    );
+                    if active && i == active_idx {
+                        let px = x1 + (x2 - x1) * pulse_t;
+                        painter.circle_filled(egui::pos2(px, cy), 4.0, pal.pass);
+                    }
+                }
+            }
+
+            for (i, name) in stages.iter().enumerate() {
+                let cx = rect.left() + step_w * (i as f32 + 0.5);
+                let box_rect = egui::Rect::from_center_size(
+                    egui::pos2(cx, cy),
+                    egui::vec2((step_w - 10.0).max(54.0), 34.0),
+                );
+                let is_now = active && i == active_idx;
+                let fill = if is_now {
+                    pal.accent.linear_multiply(0.35)
+                } else {
+                    pal.panel
+                };
+                let stroke_col = if is_now { pal.accent } else { pal.border };
+                painter.rect(
+                    box_rect,
+                    5.0,
+                    fill,
+                    Stroke::new(if is_now { 2.0 } else { 1.0 }, stroke_col),
+                    egui::StrokeKind::Inside,
+                );
+                painter.text(
+                    box_rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    *name,
+                    egui::FontId::proportional(10.5),
+                    if is_now { pal.text } else { pal.muted },
+                );
+            }
+
+            let caption = if active {
+                format!(
+                    "Active Stage -- {}: {}",
+                    stages[active_idx], captions[active_idx]
+                )
+            } else {
+                "Click 'Play Loop Animation' (or run a round) to watch the 8-stage Cogentic + Lean 4 loop."
+                    .to_string()
+            };
+            painter.text(
+                egui::pos2(rect.left() + 6.0, rect.bottom() - 10.0),
+                egui::Align2::LEFT_CENTER,
+                caption,
+                egui::FontId::proportional(11.5),
+                if active { pal.pass } else { pal.muted },
+            );
+        });
+}
+
+fn render_telemetry_chart(ui: &mut egui::Ui, pal: &Palette, detail: &ProblemDetail) {
+    let mut max_round = detail.problem.rounds_completed.max(1);
+    for a in &detail.attempts {
+        max_round = max_round.max(a.round);
+    }
+    egui::Frame::new()
+        .fill(pal.card)
+        .stroke(Stroke::new(1.0, pal.border))
+        .corner_radius(6.0)
+        .inner_margin(8.0)
+        .show(ui, |ui| {
+            let lem_ok = detail
+                .ledger
+                .iter()
+                .filter(|l| l.kind == LedgerKind::VerifiedLemma)
+                .count();
+            let lean_ok = detail.ledger.iter().filter(|l| l.lean_verified).count();
+            ui.label(
+                RichText::new(format!(
+                    "Round Telemetry: {} attempts | {} verified lemmas | {} Lean 4 verified",
+                    detail.attempts.len(),
+                    lem_ok,
+                    lean_ok
+                ))
+                .small()
+                .color(pal.muted),
+            );
+            let desired = egui::vec2(ui.available_width().max(200.0), 46.0);
+            let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
+            let painter = ui.painter_at(rect);
+            let bar_w = (rect.width() / max_round as f32).min(48.0);
+            for r in 1..=max_round {
+                let r_attempts: Vec<_> = detail.attempts.iter().filter(|a| a.round == r).collect();
+                let passes = r_attempts
+                    .iter()
+                    .filter(|a| {
+                        a.single_verdict == Verdict::Pass && a.comp_verdict == Verdict::Pass
+                    })
+                    .count();
+                let col = if passes > 0 {
+                    pal.pass
+                } else if r_attempts.is_empty() {
+                    pal.border
+                } else {
+                    pal.fail
+                };
+                let h = if r_attempts.is_empty() {
+                    8.0
+                } else {
+                    (14.0 + r_attempts.len() as f32 * 8.0).min(rect.height() - 14.0)
+                };
+                let x = rect.left() + (r - 1) as f32 * bar_w + 4.0;
+                let bar = egui::Rect::from_min_size(
+                    egui::pos2(x, rect.bottom() - h - 12.0),
+                    egui::vec2((bar_w - 8.0).max(12.0), h),
+                );
+                painter.rect_filled(bar, 3.0, col);
+                painter.text(
+                    egui::pos2(bar.center().x, rect.bottom() - 5.0),
+                    egui::Align2::CENTER_CENTER,
+                    format!("R{r}"),
+                    egui::FontId::proportional(10.0),
+                    pal.muted,
+                );
+            }
+        });
 }

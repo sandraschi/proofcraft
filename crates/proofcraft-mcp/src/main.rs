@@ -103,6 +103,23 @@ enum SubCmd {
         #[arg(long, default_value = "md")]
         format: String,
     },
+    /// Import a problem from an arXiv ID/URL, erdosproblems.com, or web URL
+    ImportUrl {
+        #[arg(long)]
+        url: String,
+    },
+    /// Load a curated problem pack (lean_warmup, erdos_combinatorics, cogentic_paper)
+    LoadPack {
+        #[arg(long)]
+        pack: String,
+    },
+    /// Export verified Lean 4 lemmas as a compilable Lake project
+    ExportLake {
+        #[arg(long)]
+        problem_id: String,
+        #[arg(long)]
+        out_dir: String,
+    },
     /// Clear all demo/stored data
     ClearDemo,
     /// Reload embedded demo seed problems
@@ -245,6 +262,36 @@ impl ToolHost for ProofHost {
                     "required": ["problem_id"]
                 }
             }),
+            json!({
+                "name": "proof_import_url",
+                "description": "Import a proof problem from an arXiv ID/URL, erdosproblems.com, openproblemgarden.org, or raw .lean/.md URL.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "url": { "type": "string" } },
+                    "required": ["url"]
+                }
+            }),
+            json!({
+                "name": "proof_load_pack",
+                "description": "Load a curated problem pack: lean_warmup, erdos_combinatorics, or cogentic_paper.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "pack": { "type": "string" } },
+                    "required": ["pack"]
+                }
+            }),
+            json!({
+                "name": "proof_export_lake",
+                "description": "Export a problem's Lean 4 verified lemmas as a compilable Lake project (lakefile.toml + Main.lean + VerifiedLemmas.lean).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "problem_id": { "type": "string" },
+                        "out_dir": { "type": "string" }
+                    },
+                    "required": ["problem_id", "out_dir"]
+                }
+            }),
         ]
     }
 
@@ -346,6 +393,32 @@ impl ToolHost for ProofHost {
                     .get("format")
                     .and_then(Value::as_str)
                     .unwrap_or("md")
+                    .to_string(),
+            },
+            "proof_import_url" => Command::ImportProblemFromUrl {
+                url: args
+                    .get("url")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing url".to_string())?
+                    .to_string(),
+            },
+            "proof_load_pack" => Command::LoadPack {
+                pack: args
+                    .get("pack")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing pack".to_string())?
+                    .to_string(),
+            },
+            "proof_export_lake" => Command::ExportLakeProject {
+                problem_id: args
+                    .get("problem_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing problem_id".to_string())?
+                    .to_string(),
+                out_dir: args
+                    .get("out_dir")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing out_dir".to_string())?
                     .to_string(),
             },
             other => return Err(format!("unknown tool: {other}")),
@@ -469,6 +542,15 @@ fn main() {
         SubCmd::Consolidate { problem_id, format } => {
             Command::ConsolidateManuscript { problem_id, format }
         }
+        SubCmd::ImportUrl { url } => Command::ImportProblemFromUrl { url },
+        SubCmd::LoadPack { pack } => Command::LoadPack { pack },
+        SubCmd::ExportLake {
+            problem_id,
+            out_dir,
+        } => Command::ExportLakeProject {
+            problem_id,
+            out_dir,
+        },
         SubCmd::ClearDemo => Command::ClearDemoData,
         SubCmd::LoadDemo => Command::LoadDemoData,
     };
@@ -529,7 +611,7 @@ mod tests {
         )
         .expect("list");
         let tools = list["result"]["tools"].as_array().expect("array");
-        assert_eq!(tools.len(), 12);
+        assert_eq!(tools.len(), 15);
     }
 
     #[test]

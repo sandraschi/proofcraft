@@ -1,5 +1,6 @@
 pub mod harness;
 pub mod help;
+pub mod importer;
 pub mod lean;
 pub mod literature;
 pub mod llm;
@@ -83,6 +84,16 @@ pub enum Command {
     ConsolidateManuscript {
         problem_id: String,
         format: String,
+    },
+    ImportProblemFromUrl {
+        url: String,
+    },
+    LoadPack {
+        pack: String,
+    },
+    ExportLakeProject {
+        problem_id: String,
+        out_dir: String,
     },
     ClearDemoData,
     LoadDemoData,
@@ -221,6 +232,26 @@ pub fn dispatch(
                 Err(_) => json!({ "mode": "deterministic_export", "manuscript": base_doc }),
             };
             Ok(polished)
+        }
+        Command::ImportProblemFromUrl { url } => {
+            let p = importer::import_problem_from_url(store, &url)?;
+            Ok(serde_json::to_value(p)?)
+        }
+        Command::LoadPack { pack } => {
+            let parsed = importer::ProblemPack::from_str_lossy(&pack)
+                .ok_or_else(|| ProofError::InvalidInput(format!("unknown pack: {pack}")))?;
+            let count = importer::load_pack(store, parsed)?;
+            Ok(json!({ "pack": parsed.id(), "loaded_problems": count }))
+        }
+        Command::ExportLakeProject {
+            problem_id,
+            out_dir,
+        } => {
+            let path = std::path::Path::new(&out_dir);
+            let lemma_count = store.export_lake_project(&problem_id, path)?;
+            Ok(
+                json!({ "problem_id": problem_id, "out_dir": out_dir, "verified_lemmas_exported": lemma_count }),
+            )
         }
         Command::ClearDemoData => {
             store.clear_all()?;
