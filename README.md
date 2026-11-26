@@ -17,6 +17,12 @@ Each Cogentic round with $N$ provers spends:
 
 A **`Max Calls: 200`** budget cap means `proofcraft` refuses to start a new round if it would exceed 200 total LLM requests on that problem, preventing runaway API bills or endless overnight GPU loops. (In the Cogentic paper, solving an open research problem took ~100 to ~1,000 total model calls.)
 
+## What Math Level Do You Need?
+
+- **To play around and understand the workflow (High school / 1st-year undergrad):** If you know basic algebra, inequalities ($2ab \le a^2 + b^2$), proof by induction, and what a lemma vs. counterexample is, the Kanban board, adversarial verifiers, Verified Ledger, and Lean 4 `PASS`/`FAIL` checks all make immediate sense.
+- **To run your own problems (Undergrad discrete math / CS):** Combinatorics, graph properties, algorithm invariants, recurrence bounds, and elementary number theory work great. With **Lean 4** enabled, `lean --stdin` + the `sorry`/`admit` guard mechanically checks every step.
+- **To audit the two pre-loaded `PAPER DEMO` problems (Grad-level TCS / optimization):** Those two examples come from STOC/FOCS online learning theory. You do not need that level to run `proofcraft` on your own problems, but for *unformalized* natural-language proofs (without `LEAN 4 VERIFIED`), only trust proofs in domains where you can check the steps yourself.
+
 ## Architecture
 
 - **`crates/proofcraft-core` (L1):** SQLite-backed Record & Verified Ledger, independent Summarizer briefings, Prover + Two-Tier Adversarial Verifier loop, Isolated Lemma Auditor, non-mathematical Process Advisor, live LLM provider discovery, and hard call/round/USD budget caps.

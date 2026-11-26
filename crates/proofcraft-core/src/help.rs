@@ -35,6 +35,10 @@ impl HelpTab {
     pub fn body(&self) -> &'static str {
         match self {
             Self::GetStarted => concat!(
+                "WHAT MATH LEVEL DO YOU NEED?\n",
+                "- To play around & understand the workflow (High school / 1st-year undergrad): Basic algebra, inequalities (2ab <= a^2 + b^2), induction, and lemma vs. counterexample is plenty. Lean 4 gives a binary PASS/FAIL (0 errors, 0 sorrys).\n",
+                "- To run your own problems (Undergrad discrete math / CS): Combinatorics, graph properties, algorithm invariants, and elementary number theory work great.\n",
+                "- To audit the two pre-loaded PAPER DEMO problems (Grad-level TCS): Those examples come from STOC/FOCS online learning theory. For unformalized natural-language proofs (without LEAN 4 VERIFIED), only trust proofs in domains where you can check the steps yourself.\n\n",
                 "THE ORIGINAL PAPER: COGENTIC (arXiv:2609.40324)\n",
                 "Title: Cogentic: Multi-Agent Orchestration for Automated Proof Discovery\n",
                 "Authors: Yang Cai, Vineet Gupta, Yanchen Jiang, Christopher Liaw, Aranyak Mehta, Grigoris Velegkas, Di Wang (Google Research / Google DeepMind / Yale)\n",
