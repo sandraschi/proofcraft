@@ -182,7 +182,7 @@ pub fn execute_round(
             calls_spent += 1;
             let (iso_v, iso_obj) = parse_verdict_response(&iso_raw);
             if iso_v == Verdict::Pass {
-                let entry = LedgerEntry {
+                let mut entry = LedgerEntry {
                     id: format!("lem-r{}-{}", next_round, &Uuid::new_v4().to_string()[..6]),
                     kind: LedgerKind::VerifiedLemma,
                     title: format!("R{} Lemma ({})", next_round, att.prover),
@@ -193,6 +193,25 @@ pub fn execute_round(
                     lean_code: String::new(),
                     lean_verified: false,
                 };
+                if budget.auto_formalize_lemmas {
+                    if let Ok(raw_lean) = llm::complete(
+                        provider,
+                        &routing.prover_model,
+                        "Translate this lemma into self-contained Lean 4 code. Never use sorry or admit.",
+                        &format!("{}\n{}", entry.statement, entry.proof_sketch),
+                    ) {
+                        calls_spent += 1;
+                        let code = crate::lean::extract_lean_block(&raw_lean);
+                        let pdir = if budget.lake_project_dir.trim().is_empty() {
+                            None
+                        } else {
+                            Some(std::path::Path::new(budget.lake_project_dir.trim()))
+                        };
+                        let chk = crate::lean::check_lean_in_project(&code, pdir);
+                        entry.lean_code = code;
+                        entry.lean_verified = chk.passed;
+                    }
+                }
                 store.add_ledger_entry(problem_id, &entry)?;
                 lemmas_promoted += 1;
             }

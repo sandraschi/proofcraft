@@ -96,6 +96,13 @@ enum SubCmd {
         #[arg(long)]
         ledger_id: String,
     },
+    /// Consolidate and polish a problem manuscript via Formal Writer + Audit
+    Consolidate {
+        #[arg(long)]
+        problem_id: String,
+        #[arg(long, default_value = "md")]
+        format: String,
+    },
     /// Clear all demo/stored data
     ClearDemo,
     /// Reload embedded demo seed problems
@@ -226,6 +233,18 @@ impl ToolHost for ProofHost {
                     "required": ["problem_id", "ledger_id"]
                 }
             }),
+            json!({
+                "name": "proof_consolidate",
+                "description": "Run the Cogentic Consolidation Formal Writer + Audit stage (falls back to deterministic export if no LLM is configured).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "problem_id": { "type": "string" },
+                        "format": { "type": "string", "enum": ["md", "tex"] }
+                    },
+                    "required": ["problem_id"]
+                }
+            }),
         ]
     }
 
@@ -315,6 +334,18 @@ impl ToolHost for ProofHost {
                     .get("ledger_id")
                     .and_then(Value::as_str)
                     .ok_or_else(|| "missing ledger_id".to_string())?
+                    .to_string(),
+            },
+            "proof_consolidate" => Command::ConsolidateManuscript {
+                problem_id: args
+                    .get("problem_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing problem_id".to_string())?
+                    .to_string(),
+                format: args
+                    .get("format")
+                    .and_then(Value::as_str)
+                    .unwrap_or("md")
                     .to_string(),
             },
             other => return Err(format!("unknown tool: {other}")),
@@ -435,6 +466,9 @@ fn main() {
             problem_id,
             ledger_id,
         },
+        SubCmd::Consolidate { problem_id, format } => {
+            Command::ConsolidateManuscript { problem_id, format }
+        }
         SubCmd::ClearDemo => Command::ClearDemoData,
         SubCmd::LoadDemo => Command::LoadDemoData,
     };
@@ -495,7 +529,7 @@ mod tests {
         )
         .expect("list");
         let tools = list["result"]["tools"].as_array().expect("array");
-        assert_eq!(tools.len(), 11);
+        assert_eq!(tools.len(), 12);
     }
 
     #[test]
@@ -528,5 +562,77 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("proofcraft"));
+    }
+
+    #[test]
+    fn mcp_ignores_empty_lines_and_notifications() {
+        let mut h = test_host();
+        assert!(handle_line(&mut h, "   ").is_none());
+        assert!(handle_line(
+            &mut h,
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn mcp_returns_parse_and_method_errors() {
+        let mut h = test_host();
+        let bad_json = handle_line(&mut h, "{not valid json").expect("err");
+        assert_eq!(bad_json["error"]["code"], -32700);
+
+        let non_obj = handle_line(&mut h, "[1,2,3]").expect("err");
+        assert_eq!(non_obj["error"]["code"], -32600);
+
+        let unknown = handle_line(
+            &mut h,
+            r#"{"jsonrpc":"2.0","id":9,"method":"no/such_method","params":{}}"#,
+        )
+        .expect("err");
+        assert_eq!(unknown["error"]["code"], -32601);
+    }
+
+    #[test]
+    fn mcp_ping_and_resources_list() {
+        let mut h = test_host();
+        let pong =
+            handle_line(&mut h, r#"{"jsonrpc":"2.0","id":10,"method":"ping"}"#).expect("pong");
+        assert!(pong["result"].is_object());
+
+        let rlist = handle_line(
+            &mut h,
+            r#"{"jsonrpc":"2.0","id":11,"method":"resources/list"}"#,
+        )
+        .expect("list");
+        assert_eq!(rlist["result"]["resources"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn mcp_lean_status_and_consolidate_tools() {
+        let mut h = test_host();
+        let ls = handle_line(
+            &mut h,
+            r#"{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"proof_lean_status","arguments":{}}}"#,
+        )
+        .expect("ls");
+        assert_eq!(ls["result"]["isError"], false);
+
+        let cons = handle_line(
+            &mut h,
+            r#"{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"proof_consolidate","arguments":{"problem_id":"prob-anytime-experts","format":"tex"}}}"#,
+        )
+        .expect("cons");
+        assert_eq!(cons["result"]["isError"], false);
+    }
+
+    #[test]
+    fn mcp_unknown_tool_sets_is_error_true() {
+        let mut h = test_host();
+        let res = handle_line(
+            &mut h,
+            r#"{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"nonexistent","arguments":{}}}"#,
+        )
+        .expect("res");
+        assert_eq!(res["result"]["isError"], true);
     }
 }

@@ -684,4 +684,22 @@ mod tests {
     fn smoke_test_passes_on_embedded_seed() {
         assert_eq!(run_smoke_test(), 0);
     }
+
+    #[test]
+    fn all_main_tabs_have_non_empty_labels() {
+        assert_eq!(MainTab::ALL.len(), 7);
+        for tab in MainTab::ALL {
+            assert!(!tab.label().is_empty());
+        }
+    }
+
+    #[test]
+    fn dark_and_light_skins_use_expected_polarity() {
+        let dark = palette(Skin::Dark);
+        let light = palette(Skin::Light);
+        let ivory = palette(Skin::IvoryProof);
+        assert!(dark.bg.r() < 40);
+        assert!(light.bg.r() > 200);
+        assert!(ivory.bg.r() > 200);
+    }
 }

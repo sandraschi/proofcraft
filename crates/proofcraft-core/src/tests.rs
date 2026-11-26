@@ -56,6 +56,7 @@ fn budget_cap_blocks_excess_calls() {
         max_calls_per_run: 90,
         max_rounds_per_run: 10,
         max_usd_per_run: 1.0,
+        ..BudgetConfig::default()
     };
     let err = check_budget_remaining(&detail, &tight_budget, 10).unwrap_err();
     assert!(matches!(err, ProofError::BudgetExceeded(_)));
@@ -72,6 +73,7 @@ fn budget_cap_blocks_max_rounds() {
         max_calls_per_run: 500,
         max_rounds_per_run: 3,
         max_usd_per_run: 5.0,
+        ..BudgetConfig::default()
     };
     let err = check_budget_remaining(&detail, &tight_budget, 1).unwrap_err();
     assert!(matches!(err, ProofError::BudgetExceeded(_)));
@@ -325,6 +327,306 @@ fn lean_check_returns_structured_result() {
     let extracted =
         extract_lean_block("Here is the code:\n```lean\ntheorem x : True := trivial\n```");
     assert_eq!(extracted, "theorem x : True := trivial");
+}
+
+#[test]
+fn lean_sorry_detector_ignores_comments_and_catches_code() {
+    use crate::lean::contains_sorry_or_admit;
+
+    assert!(!contains_sorry_or_admit(
+        "-- sorry this is just a comment\ntheorem a : True := trivial"
+    ));
+    assert!(contains_sorry_or_admit("theorem a : False := by sorry"));
+    assert!(contains_sorry_or_admit("theorem b : False := by admit"));
+    assert!(!contains_sorry_or_admit(
+        "theorem sorry_helper : True := trivial"
+    ));
+}
+
+#[test]
+fn lean_extract_block_handles_generic_fence_and_plain() {
+    use crate::lean::extract_lean_block;
+
+    assert_eq!(
+        extract_lean_block("```\ntheorem a : True := trivial\n```"),
+        "theorem a : True := trivial"
+    );
+    assert_eq!(
+        extract_lean_block("  theorem b : True := trivial  "),
+        "theorem b : True := trivial"
+    );
+}
+
+#[test]
+fn lean_check_in_project_falls_back_when_no_lakefile() {
+    use crate::lean::check_lean_in_project;
+
+    let res = check_lean_in_project(
+        "theorem t : 2 * 3 = 6 := rfl",
+        Some(std::path::Path::new(".")),
+    );
+    assert!(res.available);
+    assert!(res.passed);
+}
+
+#[test]
+fn update_ledger_lean_persists_and_rejects_missing_id() {
+    let store = ProofStore::open_in_memory().expect("db");
+    store.load_embedded_seed().expect("seed");
+    store
+        .update_ledger_lean(
+            "prob-anytime-experts",
+            "lem-active-pool",
+            "theorem pool : 1 = 1 := rfl",
+            true,
+        )
+        .expect("update");
+    let ledger = store.list_ledger("prob-anytime-experts").expect("list");
+    let item = ledger
+        .iter()
+        .find(|l| l.id == "lem-active-pool")
+        .expect("item");
+    assert!(item.lean_verified);
+    assert_eq!(item.lean_code, "theorem pool : 1 = 1 := rfl");
+
+    let err = store
+        .update_ledger_lean("prob-anytime-experts", "does-not-exist", "", false)
+        .unwrap_err();
+    assert!(matches!(err, ProofError::NotFound(_)));
+}
+
+#[test]
+fn file_backed_sqlite_persists_across_reopen() {
+    let tmp = std::env::temp_dir().join(format!("proofcraft_test_{}.sqlite", uuid::Uuid::new_v4()));
+    {
+        let store = ProofStore::open(&tmp).expect("open");
+        let p = store
+            .create_problem("Disk Persistence", "Algebra", "Prove x = x.", 42)
+            .expect("create");
+        assert!(!p.id.is_empty());
+    }
+    {
+        let store2 = ProofStore::open(&tmp).expect("reopen");
+        let list = store2.list_problems().expect("list");
+        assert!(list.iter().any(|p| p.title == "Disk Persistence"));
+    }
+    let _ = std::fs::remove_file(&tmp);
+}
+
+#[test]
+fn provider_kind_defaults_and_env_names() {
+    assert_eq!(
+        ProviderKind::Ollama.default_base_url(),
+        "http://127.0.0.1:11434"
+    );
+    assert_eq!(
+        ProviderKind::LmStudio.default_base_url(),
+        "http://127.0.0.1:1234/v1"
+    );
+    assert_eq!(ProviderKind::Gemini.env_var_name(), "GEMINI_API_KEY");
+    assert_eq!(ProviderKind::Anthropic.env_var_name(), "ANTHROPIC_API_KEY");
+    assert_eq!(ProviderKind::OpenAiCompat.env_var_name(), "OPENAI_API_KEY");
+}
+
+#[test]
+fn complete_without_model_returns_provider_error() {
+    let err = crate::llm::complete(&ProviderConfig::default(), "", "sys", "usr").unwrap_err();
+    assert!(matches!(err, ProofError::Provider(_)));
+}
+
+#[test]
+fn arxiv_parser_rejects_missing_entry_and_normalizes_pdf_url() {
+    use crate::literature::{normalize_arxiv_id, parse_arxiv_atom};
+
+    assert_eq!(
+        normalize_arxiv_id("https://arxiv.org/pdf/2609.40324.pdf"),
+        "2609.40324"
+    );
+    let err = parse_arxiv_atom("<feed></feed>", "2609.40324").unwrap_err();
+    assert!(matches!(err, ProofError::NotFound(_)));
+}
+
+#[test]
+fn problem_status_and_verdict_lossy_parsers() {
+    use crate::model::{DirectionStatus, ProblemStatus};
+
+    assert_eq!(
+        ProblemStatus::from_str_lossy("Verified"),
+        ProblemStatus::Verified
+    );
+    assert_eq!(
+        ProblemStatus::from_str_lossy("BudgetExhausted"),
+        ProblemStatus::BudgetExhausted
+    );
+    assert_eq!(
+        ProblemStatus::from_str_lossy("unknown"),
+        ProblemStatus::Queued
+    );
+
+    assert_eq!(
+        DirectionStatus::from_str_lossy("Proved"),
+        DirectionStatus::Proved
+    );
+    assert_eq!(
+        DirectionStatus::from_str_lossy("Excluded"),
+        DirectionStatus::Excluded
+    );
+    assert_eq!(
+        DirectionStatus::from_str_lossy("other"),
+        DirectionStatus::Active
+    );
+
+    assert_eq!(Verdict::from_str_lossy("accepted"), Verdict::Pass);
+    assert_eq!(Verdict::from_str_lossy("REJECT"), Verdict::Fail);
+    assert_eq!(Verdict::from_str_lossy("maybe"), Verdict::Pending);
+}
+
+#[test]
+fn consolidate_manuscript_falls_back_deterministically_without_llm() {
+    let store = ProofStore::open_in_memory().expect("db");
+    store.load_embedded_seed().expect("seed");
+    let res = dispatch(
+        &store,
+        &ProviderConfig::default(),
+        &RoleRouting::default(),
+        &BudgetConfig::default(),
+        Command::ConsolidateManuscript {
+            problem_id: "prob-anytime-experts".to_string(),
+            format: "md".to_string(),
+        },
+    )
+    .expect("consolidate");
+    assert_eq!(res["mode"], "deterministic_export");
+    assert!(res["manuscript"]
+        .as_str()
+        .unwrap()
+        .contains("Anytime Regret"));
+}
+
+#[test]
+fn get_missing_problem_returns_not_found() {
+    let store = ProofStore::open_in_memory().expect("db");
+    let err = store.get_problem_detail("nonexistent-id").unwrap_err();
+    assert!(matches!(err, ProofError::NotFound(_)));
+}
+
+#[test]
+fn helper_formatters_produce_expected_output() {
+    use crate::model::{Direction, DirectionStatus, Problem};
+    use crate::{direction_label, format_advisor_line, ledger_badge, problem_summary_line};
+
+    let p = Problem {
+        id: "p1".to_string(),
+        title: "Test".to_string(),
+        domain: "Math".to_string(),
+        statement: "S".to_string(),
+        status: ProblemStatus::InProgress,
+        max_calls: 100,
+        calls_used: 12,
+        rounds_completed: 2,
+    };
+    assert!(problem_summary_line(&p).contains("12 calls / 100 max"));
+
+    let d = Direction {
+        id: "d1".to_string(),
+        name: "Dir".to_string(),
+        claim: "C".to_string(),
+        status: DirectionStatus::Proved,
+    };
+    assert_eq!(direction_label(&d), "Dir [Proved]");
+
+    let n = AdvisorNote {
+        round: 2,
+        observation: "obs".to_string(),
+        instruction_delta: "delta".to_string(),
+    };
+    assert_eq!(format_advisor_line(&n), "R2: obs -> delta");
+
+    let l = LedgerEntry {
+        id: "l1".to_string(),
+        kind: LedgerKind::DeadEnd,
+        title: "D".to_string(),
+        statement: "S".to_string(),
+        proof_sketch: "P".to_string(),
+        isolated_verified: false,
+        source_attempt: "a".to_string(),
+        lean_code: String::new(),
+        lean_verified: false,
+    };
+    assert_eq!(ledger_badge(&l), "DEAD END");
+}
+
+#[test]
+fn dispatch_clear_and_load_demo_commands() {
+    let store = ProofStore::open_in_memory().expect("db");
+    let p = &ProviderConfig::default();
+    let r = &RoleRouting::default();
+    let b = &BudgetConfig::default();
+    let loaded = dispatch(&store, p, r, b, Command::LoadDemoData).expect("load");
+    assert_eq!(loaded["loaded_problems"], 2);
+    let cleared = dispatch(&store, p, r, b, Command::ClearDemoData).expect("clear");
+    assert_eq!(cleared["cleared"], true);
+}
+
+#[test]
+fn dispatch_lean_status_command_succeeds() {
+    let store = ProofStore::open_in_memory().expect("db");
+    let res = dispatch(
+        &store,
+        &ProviderConfig::default(),
+        &RoleRouting::default(),
+        &BudgetConfig::default(),
+        Command::LeanStatus,
+    )
+    .expect("lean status");
+    assert_eq!(res["available"], true);
+}
+
+#[test]
+fn budget_config_and_role_routing_defaults() {
+    let b = BudgetConfig::default();
+    assert_eq!(b.max_calls_per_run, 200);
+    assert_eq!(b.max_rounds_per_run, 12);
+    assert!(!b.auto_formalize_lemmas);
+    assert!(b.lake_project_dir.is_empty());
+
+    let r = RoleRouting::default();
+    assert!(r.prover_model.is_empty());
+    assert!(r.verifier_model.is_empty());
+}
+
+#[test]
+fn ledger_kind_round_trip_and_lossy() {
+    assert_eq!(LedgerKind::from_str_lossy("DeadEnd"), LedgerKind::DeadEnd);
+    assert_eq!(
+        LedgerKind::from_str_lossy("VerifiedLemma"),
+        LedgerKind::VerifiedLemma
+    );
+    assert_eq!(
+        LedgerKind::from_str_lossy("other"),
+        LedgerKind::VerifiedLemma
+    );
+}
+
+#[test]
+fn help_tabs_have_distinct_titles() {
+    let mut titles: Vec<&str> = HelpTab::ALL.iter().map(HelpTab::title).collect();
+    titles.sort_unstable();
+    titles.dedup();
+    assert_eq!(titles.len(), 7);
+}
+
+#[test]
+fn provider_default_has_empty_model_for_live_discovery() {
+    let p = ProviderConfig::default();
+    assert!(p.default_model.is_empty());
+    assert_eq!(p.kind, ProviderKind::Ollama);
+}
+
+#[test]
+fn bundled_skill_md_contains_frontmatter() {
+    assert!(crate::help::BUNDLED_SKILL_MD.starts_with("---"));
+    assert!(crate::help::BUNDLED_SKILL_MD.contains("name: proofcraft"));
 }
 
 #[test]

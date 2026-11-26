@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +36,30 @@ pub fn resolve_lean_exe() -> Option<PathBuf> {
     }
     if let Ok(home) = std::env::var("HOME") {
         let candidate = PathBuf::from(home).join(".elan").join("bin").join("lean");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+pub fn resolve_lake_exe() -> Option<PathBuf> {
+    if let Ok(out) = Command::new("lake").arg("--version").output() {
+        if out.status.success() {
+            return Some(PathBuf::from("lake"));
+        }
+    }
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        let candidate = PathBuf::from(profile)
+            .join(".elan")
+            .join("bin")
+            .join("lake.exe");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let candidate = PathBuf::from(home).join(".elan").join("bin").join("lake");
         if candidate.is_file() {
             return Some(candidate);
         }
@@ -98,32 +122,64 @@ pub fn extract_lean_block(raw: &str) -> String {
 }
 
 pub fn check_lean_snippet(code: &str) -> LeanCheckResult {
-    let Some(exe) = resolve_lean_exe() else {
-        return LeanCheckResult {
-            available: false,
-            passed: false,
-            sorry_detected: false,
-            stdout: String::new(),
-            stderr: "lean executable not found on PATH or ~/.elan/bin".to_string(),
-        };
-    };
+    check_lean_in_project(code, None)
+}
 
+pub fn check_lean_in_project(code: &str, project_dir: Option<&Path>) -> LeanCheckResult {
     let sorry_detected = contains_sorry_or_admit(code);
 
-    let Ok(mut child) = Command::new(&exe)
-        .arg("--stdin")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    else {
-        return LeanCheckResult {
-            available: false,
-            passed: false,
-            sorry_detected,
-            stdout: String::new(),
-            stderr: "failed to spawn lean --stdin".to_string(),
+    let use_lake = project_dir
+        .filter(|p| p.join("lakefile.lean").is_file() || p.join("lakefile.toml").is_file())
+        .and_then(|dir| resolve_lake_exe().map(|lake| (lake, dir)));
+
+    let mut child = if let Some((lake_exe, dir)) = use_lake {
+        match Command::new(&lake_exe)
+            .args(["env", "lean", "--stdin"])
+            .current_dir(dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => {
+                return LeanCheckResult {
+                    available: false,
+                    passed: false,
+                    sorry_detected,
+                    stdout: String::new(),
+                    stderr: "failed to spawn lake env lean --stdin".to_string(),
+                };
+            }
+        }
+    } else {
+        let Some(exe) = resolve_lean_exe() else {
+            return LeanCheckResult {
+                available: false,
+                passed: false,
+                sorry_detected,
+                stdout: String::new(),
+                stderr: "lean executable not found on PATH or ~/.elan/bin".to_string(),
+            };
         };
+        match Command::new(&exe)
+            .arg("--stdin")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => {
+                return LeanCheckResult {
+                    available: false,
+                    passed: false,
+                    sorry_detected,
+                    stdout: String::new(),
+                    stderr: "failed to spawn lean --stdin".to_string(),
+                };
+            }
+        }
     };
 
     if let Some(mut stdin) = child.stdin.take() {

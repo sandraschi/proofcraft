@@ -541,6 +541,20 @@ pub fn render_settings(
                         .speed(0.5)
                         .prefix("Max USD/Run: $"),
                 );
+                ui.separator();
+                ui.label(
+                    RichText::new("Lean 4 & Mathlib (Lake) Integration")
+                        .strong()
+                        .color(pal.text),
+                );
+                ui.checkbox(
+                    &mut budget.auto_formalize_lemmas,
+                    "Auto-formalize promoted lemmas in Lean 4 during rounds",
+                );
+                ui.horizontal(|ui| {
+                    ui.label("Lake Project Dir (optional):");
+                    ui.text_edit_singleline(&mut budget.lake_project_dir);
+                });
             }
             SettingsSection::LlmProviders => {
                 ui.label(

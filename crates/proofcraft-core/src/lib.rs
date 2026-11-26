@@ -80,6 +80,10 @@ pub enum Command {
         problem_id: String,
         ledger_id: String,
     },
+    ConsolidateManuscript {
+        problem_id: String,
+        format: String,
+    },
     ClearDemoData,
     LoadDemoData,
 }
@@ -192,13 +196,31 @@ pub fn dispatch(
             );
             let raw = llm::complete(provider, &routing.prover_model, sys, &prompt)?;
             let lean_code = lean::extract_lean_block(&raw);
-            let check = lean::check_lean_snippet(&lean_code);
+            let project_dir = if budget.lake_project_dir.trim().is_empty() {
+                None
+            } else {
+                Some(std::path::Path::new(budget.lake_project_dir.trim()))
+            };
+            let check = lean::check_lean_in_project(&lean_code, project_dir);
             store.update_ledger_lean(&problem_id, &ledger_id, &lean_code, check.passed)?;
             Ok(json!({
                 "ledger_id": ledger_id,
                 "lean_code": lean_code,
                 "check": check
             }))
+        }
+        Command::ConsolidateManuscript { problem_id, format } => {
+            let base_doc = store.export_manuscript(&problem_id, &format)?;
+            let polished = match llm::complete(
+                provider,
+                &routing.prover_model,
+                "You are the Cogentic Consolidation Formal Writer & Final Auditor. Polish the exposition, notation, and lemma cross-references without altering any mathematical claim.",
+                &base_doc,
+            ) {
+                Ok(text) => json!({ "mode": "llm_audited", "manuscript": text }),
+                Err(_) => json!({ "mode": "deterministic_export", "manuscript": base_doc }),
+            };
+            Ok(polished)
         }
         Command::ClearDemoData => {
             store.clear_all()?;

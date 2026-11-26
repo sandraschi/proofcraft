@@ -262,6 +262,10 @@ pub struct BudgetConfig {
     pub max_calls_per_run: u32,
     pub max_rounds_per_run: u32,
     pub max_usd_per_run: f64,
+    #[serde(default)]
+    pub auto_formalize_lemmas: bool,
+    #[serde(default)]
+    pub lake_project_dir: String,
 }
 
 impl Default for BudgetConfig {
@@ -270,6 +274,8 @@ impl Default for BudgetConfig {
             max_calls_per_run: 200,
             max_rounds_per_run: 12,
             max_usd_per_run: 5.0,
+            auto_formalize_lemmas: false,
+            lake_project_dir: String::new(),
         }
     }
 }
