@@ -145,6 +145,10 @@ pub struct LedgerEntry {
     pub proof_sketch: String,
     pub isolated_verified: bool,
     pub source_attempt: String,
+    #[serde(default)]
+    pub lean_code: String,
+    #[serde(default)]
+    pub lean_verified: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

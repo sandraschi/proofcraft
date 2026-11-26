@@ -119,6 +119,7 @@ struct ProofCraftApp {
     new_arxiv_id: String,
     lean_code: String,
     lean_output: String,
+    lean_label: String,
     show_copilot: bool,
     copilot_input: String,
     copilot_messages: Vec<(String, String)>,
@@ -138,6 +139,14 @@ impl ProofCraftApp {
             .ok()
             .and_then(|v| v.first().map(|p| p.id.clone()))
             .unwrap_or_default();
+
+        let lean_st = proofcraft_core::lean::lean_status();
+        let lean_label = if lean_st.available {
+            let short = lean_st.version.split(',').next().unwrap_or("Lean 4").trim();
+            short.to_string()
+        } else {
+            "Lean: not found".to_string()
+        };
 
         Self {
             store,
@@ -162,6 +171,7 @@ impl ProofCraftApp {
             new_arxiv_id: String::new(),
             lean_code: "theorem sanity : 1 + 1 = 2 := rfl".to_string(),
             lean_output: String::new(),
+            lean_label,
             show_copilot: false,
             copilot_input: String::new(),
             copilot_messages: Vec::new(),
@@ -401,7 +411,8 @@ impl eframe::App for ProofCraftApp {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
                         RichText::new(format!(
-                            "Provider: {} | Zoom: {:.0}%",
+                            "{} | Provider: {} | Zoom: {:.0}%",
+                            self.lean_label,
                             self.provider.kind.as_str(),
                             self.prefs.zoom_factor * 100.0
                         ))
@@ -580,6 +591,11 @@ impl eframe::App for ProofCraftApp {
                             &d,
                             &mut self.lean_code,
                             &mut self.lean_output,
+                            &self.store,
+                            &self.provider,
+                            &self.routing,
+                            &self.budget,
+                            &mut self.status_msg,
                         ),
                         MainTab::Advisor => render_advisor(ui, &pal, &d),
                         MainTab::Manuscript => render_manuscript(

@@ -93,7 +93,9 @@ impl ProofStore {
                 statement TEXT NOT NULL,
                 proof_sketch TEXT NOT NULL,
                 isolated_verified INTEGER NOT NULL,
-                source_attempt TEXT NOT NULL
+                source_attempt TEXT NOT NULL,
+                lean_code TEXT NOT NULL DEFAULT '',
+                lean_verified INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS advisor_notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,6 +113,15 @@ impl ProofStore {
                 url TEXT NOT NULL
             );",
         )?;
+        // Safe migration for pre-existing databases lacking Lean columns
+        let _ = conn.execute(
+            "ALTER TABLE ledger ADD COLUMN lean_code TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE ledger ADD COLUMN lean_verified INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
         Ok(())
     }
 
@@ -320,8 +331,8 @@ impl ProofStore {
         let conn = self.lock_conn()?;
         conn.execute(
             "INSERT OR REPLACE INTO ledger
-             (id, problem_id, kind, title, statement, proof_sketch, isolated_verified, source_attempt)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             (id, problem_id, kind, title, statement, proof_sketch, isolated_verified, source_attempt, lean_code, lean_verified)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 entry.id,
                 problem_id,
@@ -330,9 +341,35 @@ impl ProofStore {
                 entry.statement,
                 entry.proof_sketch,
                 if entry.isolated_verified { 1 } else { 0 },
-                entry.source_attempt
+                entry.source_attempt,
+                entry.lean_code,
+                if entry.lean_verified { 1 } else { 0 }
             ],
         )?;
+        Ok(())
+    }
+
+    pub fn update_ledger_lean(
+        &self,
+        problem_id: &str,
+        ledger_id: &str,
+        lean_code: &str,
+        lean_verified: bool,
+    ) -> Result<()> {
+        let conn = self.lock_conn()?;
+        let affected = conn.execute(
+            "UPDATE ledger SET lean_code = ?3, lean_verified = ?4
+             WHERE problem_id = ?1 AND id = ?2",
+            params![
+                problem_id,
+                ledger_id,
+                lean_code,
+                if lean_verified { 1 } else { 0 }
+            ],
+        )?;
+        if affected == 0 {
+            return Err(ProofError::NotFound(format!("ledger entry {ledger_id}")));
+        }
         Ok(())
     }
 
@@ -391,12 +428,13 @@ impl ProofStore {
     pub fn list_ledger(&self, problem_id: &str) -> Result<Vec<LedgerEntry>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, kind, title, statement, proof_sketch, isolated_verified, source_attempt
+            "SELECT id, kind, title, statement, proof_sketch, isolated_verified, source_attempt, lean_code, lean_verified
              FROM ledger WHERE problem_id = ?1 ORDER BY rowid ASC",
         )?;
         let rows = stmt.query_map(params![problem_id], |row| {
             let kind_str: String = row.get(1)?;
             let iso: i64 = row.get(5)?;
+            let lv: i64 = row.get(8)?;
             Ok(LedgerEntry {
                 id: row.get(0)?,
                 kind: LedgerKind::from_str_lossy(&kind_str),
@@ -405,6 +443,8 @@ impl ProofStore {
                 proof_sketch: row.get(4)?,
                 isolated_verified: iso != 0,
                 source_attempt: row.get(6)?,
+                lean_code: row.get(7)?,
+                lean_verified: lv != 0,
             })
         })?;
         let mut out = Vec::new();

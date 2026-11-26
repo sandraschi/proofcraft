@@ -190,6 +190,8 @@ pub fn execute_round(
                     proof_sketch: iso_obj,
                     isolated_verified: true,
                     source_attempt: att.id.clone(),
+                    lean_code: String::new(),
+                    lean_verified: false,
                 };
                 store.add_ledger_entry(problem_id, &entry)?;
                 lemmas_promoted += 1;

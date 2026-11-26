@@ -75,6 +75,11 @@ pub enum Command {
     CheckLean {
         code: String,
     },
+    LeanStatus,
+    FormalizeLemma {
+        problem_id: String,
+        ledger_id: String,
+    },
     ClearDemoData,
     LoadDemoData,
 }
@@ -166,6 +171,34 @@ pub fn dispatch(
         Command::CheckLean { code } => {
             let res = lean::check_lean_snippet(&code);
             Ok(serde_json::to_value(res)?)
+        }
+        Command::LeanStatus => {
+            let st = lean::lean_status();
+            Ok(serde_json::to_value(st)?)
+        }
+        Command::FormalizeLemma {
+            problem_id,
+            ledger_id,
+        } => {
+            let entries = store.list_ledger(&problem_id)?;
+            let entry = entries
+                .into_iter()
+                .find(|e| e.id == ledger_id)
+                .ok_or_else(|| ProofError::NotFound(format!("ledger entry {ledger_id}")))?;
+            let sys = "You are a Lean 4 formalizer. Output ONLY a self-contained Lean 4 code block (no Mathlib imports, pure Lean 4 core) proving the lemma or an equivalent finite/concrete instance. Never use `sorry` or `admit`.";
+            let prompt = format!(
+                "Title: {}\nStatement: {}\nProof Sketch: {}",
+                entry.title, entry.statement, entry.proof_sketch
+            );
+            let raw = llm::complete(provider, &routing.prover_model, sys, &prompt)?;
+            let lean_code = lean::extract_lean_block(&raw);
+            let check = lean::check_lean_snippet(&lean_code);
+            store.update_ledger_lean(&problem_id, &ledger_id, &lean_code, check.passed)?;
+            Ok(json!({
+                "ledger_id": ledger_id,
+                "lean_code": lean_code,
+                "check": check
+            }))
         }
         Command::ClearDemoData => {
             store.clear_all()?;

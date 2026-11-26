@@ -87,6 +87,15 @@ enum SubCmd {
         #[arg(long)]
         code: String,
     },
+    /// Show detected Lean 4 toolchain status
+    LeanStatus,
+    /// Formalize a Verified Ledger lemma to Lean 4 and verify it
+    FormalizeLemma {
+        #[arg(long)]
+        problem_id: String,
+        #[arg(long)]
+        ledger_id: String,
+    },
     /// Clear all demo/stored data
     ClearDemo,
     /// Reload embedded demo seed problems
@@ -191,13 +200,30 @@ impl ToolHost for ProofHost {
             }),
             json!({
                 "name": "proof_check_lean",
-                "description": "Run optional local `lean --stdin` verification on a Lean 4 snippet.",
+                "description": "Run local `lean --stdin` verification on a Lean 4 snippet (rejects `sorry` and `admit`).",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "code": { "type": "string" }
                     },
                     "required": ["code"]
+                }
+            }),
+            json!({
+                "name": "proof_lean_status",
+                "description": "Report detected Lean 4 toolchain version and executable path.",
+                "inputSchema": { "type": "object", "properties": {} }
+            }),
+            json!({
+                "name": "proof_formalize_lemma",
+                "description": "Translate a Verified Ledger lemma into Lean 4 via the configured LLM and verify it with `lean --stdin`.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "problem_id": { "type": "string" },
+                        "ledger_id": { "type": "string" }
+                    },
+                    "required": ["problem_id", "ledger_id"]
                 }
             }),
         ]
@@ -276,6 +302,19 @@ impl ToolHost for ProofHost {
                     .get("code")
                     .and_then(Value::as_str)
                     .ok_or_else(|| "missing code".to_string())?
+                    .to_string(),
+            },
+            "proof_lean_status" => Command::LeanStatus,
+            "proof_formalize_lemma" => Command::FormalizeLemma {
+                problem_id: args
+                    .get("problem_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing problem_id".to_string())?
+                    .to_string(),
+                ledger_id: args
+                    .get("ledger_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing ledger_id".to_string())?
                     .to_string(),
             },
             other => return Err(format!("unknown tool: {other}")),
@@ -388,6 +427,14 @@ fn main() {
             arxiv_id,
         },
         SubCmd::CheckLean { code } => Command::CheckLean { code },
+        SubCmd::LeanStatus => Command::LeanStatus,
+        SubCmd::FormalizeLemma {
+            problem_id,
+            ledger_id,
+        } => Command::FormalizeLemma {
+            problem_id,
+            ledger_id,
+        },
         SubCmd::ClearDemo => Command::ClearDemoData,
         SubCmd::LoadDemo => Command::LoadDemoData,
     };
@@ -448,7 +495,7 @@ mod tests {
         )
         .expect("list");
         let tools = list["result"]["tools"].as_array().expect("array");
-        assert_eq!(tools.len(), 9);
+        assert_eq!(tools.len(), 11);
     }
 
     #[test]

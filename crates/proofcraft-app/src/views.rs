@@ -274,12 +274,18 @@ fn verdict_color(v: Verdict, pal: &Palette) -> Color32 {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_ledger(
     ui: &mut egui::Ui,
     pal: &Palette,
     detail: &ProblemDetail,
     lean_code: &mut String,
     lean_output: &mut String,
+    store: &ProofStore,
+    provider: &ProviderConfig,
+    routing: &RoleRouting,
+    budget: &BudgetConfig,
+    status_msg: &mut String,
 ) {
     ui.heading(RichText::new("Verified Ledger & Excluded Dead Ends").color(pal.text));
     ui.label(
@@ -332,6 +338,9 @@ pub fn render_ledger(
                         if entry.isolated_verified {
                             badge(ui, "ISOLATED CHECKED", pal.accent);
                         }
+                        if entry.lean_verified {
+                            badge(ui, "LEAN 4 VERIFIED", pal.pass);
+                        }
                         ui.label(RichText::new(&entry.title).strong().color(pal.text));
                     });
                     ui.add_space(4.0);
@@ -340,6 +349,34 @@ pub fn render_ledger(
                         RichText::new(format!("Proof/Basis: {}", entry.proof_sketch))
                             .color(pal.muted),
                     );
+                    if !entry.lean_code.is_empty() {
+                        ui.collapsing(format!("Lean 4 Formalization ({})", entry.id), |ui| {
+                            ui.label(RichText::new(&entry.lean_code).monospace().color(pal.text));
+                        });
+                    }
+                    if entry.kind == LedgerKind::VerifiedLemma
+                        && ui.button("Formalize & Verify in Lean 4").clicked()
+                    {
+                        match proofcraft_core::dispatch(
+                            store,
+                            provider,
+                            routing,
+                            budget,
+                            proofcraft_core::Command::FormalizeLemma {
+                                problem_id: detail.problem.id.clone(),
+                                ledger_id: entry.id.clone(),
+                            },
+                        ) {
+                            Ok(val) => {
+                                let passed = val["check"]["passed"].as_bool().unwrap_or(false);
+                                *status_msg = format!(
+                                    "Lean 4 formalization for {}: passed={passed}",
+                                    entry.id
+                                );
+                            }
+                            Err(e) => *status_msg = format!("Lean 4 formalization error: {e}"),
+                        }
+                    }
                 });
             ui.add_space(6.0);
         }

@@ -226,6 +226,8 @@ fn advisor_note_and_ledger_entry_persist() {
                 proof_sketch: "square".to_string(),
                 isolated_verified: true,
                 source_attempt: "a1".to_string(),
+                lean_code: String::new(),
+                lean_verified: false,
             },
         )
         .expect("ledger");
@@ -291,14 +293,38 @@ fn literature_persists_on_problem_and_briefing() {
 
 #[test]
 fn lean_check_returns_structured_result() {
-    use crate::lean::check_lean_snippet;
+    use crate::lean::{check_lean_snippet, extract_lean_block, lean_status};
 
-    let res = check_lean_snippet("theorem t : 1 + 1 = 2 := rfl");
-    // Regardless of whether lean is installed on host, it must never panic
-    if !res.available {
-        assert!(!res.passed);
-        assert!(res.stderr.contains("not found"));
-    }
+    let st = lean_status();
+    assert!(
+        st.available,
+        "Lean 4 should be available via PATH or ~/.elan/bin"
+    );
+
+    let ok = check_lean_snippet("theorem t_ok : 1 + 1 = 2 := rfl");
+    assert!(ok.available);
+    assert!(
+        ok.passed,
+        "expected valid Lean 4 theorem to pass: {}",
+        ok.stderr
+    );
+    assert!(!ok.sorry_detected);
+
+    let bad = check_lean_snippet("theorem t_bad : 1 + 1 = 3 := rfl");
+    assert!(bad.available);
+    assert!(!bad.passed);
+
+    let cheater = check_lean_snippet("theorem t_sorry : 1 + 1 = 3 := by sorry");
+    assert!(cheater.available);
+    assert!(cheater.sorry_detected);
+    assert!(
+        !cheater.passed,
+        "sorry must be rejected even if lean exits 0"
+    );
+
+    let extracted =
+        extract_lean_block("Here is the code:\n```lean\ntheorem x : True := trivial\n```");
+    assert_eq!(extracted, "theorem x : True := trivial");
 }
 
 #[test]
