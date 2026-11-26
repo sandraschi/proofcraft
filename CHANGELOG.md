@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 - 2026-11-26
+- Added 4-column Kanban pipeline board with `PAPER DEMO` vs `LOCAL` honesty badges.
+- Added animated 8-stage Cogentic + Lean 4 loop visualizer and round telemetry chart.
+- Added online problem importer (`arXiv`, `erdosproblems.com`, `.lean`), curated problem packs, and standalone Lake project export (`lakefile.toml` + `VerifiedLemmas.lean`).
+- Added modular `docs/` stack, 4-panel usage cartoon, and 7-tab Help Center (57 passing tests).
+
 ## 0.1.1 - 2026-11-26
 - Added Grounded Literature Reviewer (`literature.rs`, arXiv Atom fetch + SQLite persistence + prover briefing injection).
 - Added optional Lean 4 subprocess sub-lemma check (`lean.rs`, `proof_check_lean`, Ledger panel).
