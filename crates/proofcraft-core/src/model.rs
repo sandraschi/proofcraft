@@ -1,3 +1,4 @@
+use crate::literature::LiteratureRef;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,6 +161,8 @@ pub struct ProblemDetail {
     pub attempts: Vec<Attempt>,
     pub ledger: Vec<LedgerEntry>,
     pub advisor_notes: Vec<AdvisorNote>,
+    #[serde(default)]
+    pub literature: Vec<LiteratureRef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

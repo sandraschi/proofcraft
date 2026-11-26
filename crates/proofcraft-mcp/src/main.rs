@@ -75,6 +75,18 @@ enum SubCmd {
         #[arg(long, default_value_t = 2)]
         provers: u32,
     },
+    /// Fetch and attach arXiv metadata to a problem
+    AddLiterature {
+        #[arg(long)]
+        problem_id: String,
+        #[arg(long)]
+        arxiv_id: String,
+    },
+    /// Check a Lean 4 snippet via local `lean --stdin`
+    CheckLean {
+        #[arg(long)]
+        code: String,
+    },
     /// Clear all demo/stored data
     ClearDemo,
     /// Reload embedded demo seed problems
@@ -165,6 +177,29 @@ impl ToolHost for ProofHost {
                     "required": ["problem_id"]
                 }
             }),
+            json!({
+                "name": "proof_add_literature",
+                "description": "Fetch arXiv metadata and attach it as a grounded literature reference on a problem.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "problem_id": { "type": "string" },
+                        "arxiv_id": { "type": "string" }
+                    },
+                    "required": ["problem_id", "arxiv_id"]
+                }
+            }),
+            json!({
+                "name": "proof_check_lean",
+                "description": "Run optional local `lean --stdin` verification on a Lean 4 snippet.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "code": { "type": "string" }
+                    },
+                    "required": ["code"]
+                }
+            }),
         ]
     }
 
@@ -223,6 +258,25 @@ impl ToolHost for ProofHost {
                     .ok_or_else(|| "missing problem_id".to_string())?
                     .to_string(),
                 provers: args.get("provers").and_then(Value::as_u64).unwrap_or(2) as u32,
+            },
+            "proof_add_literature" => Command::AddLiterature {
+                problem_id: args
+                    .get("problem_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing problem_id".to_string())?
+                    .to_string(),
+                arxiv_id: args
+                    .get("arxiv_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing arxiv_id".to_string())?
+                    .to_string(),
+            },
+            "proof_check_lean" => Command::CheckLean {
+                code: args
+                    .get("code")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "missing code".to_string())?
+                    .to_string(),
             },
             other => return Err(format!("unknown tool: {other}")),
         };
@@ -326,6 +380,14 @@ fn main() {
             problem_id,
             provers,
         },
+        SubCmd::AddLiterature {
+            problem_id,
+            arxiv_id,
+        } => Command::AddLiterature {
+            problem_id,
+            arxiv_id,
+        },
+        SubCmd::CheckLean { code } => Command::CheckLean { code },
         SubCmd::ClearDemo => Command::ClearDemoData,
         SubCmd::LoadDemo => Command::LoadDemoData,
     };
@@ -386,7 +448,7 @@ mod tests {
         )
         .expect("list");
         let tools = list["result"]["tools"].as_array().expect("array");
-        assert_eq!(tools.len(), 7);
+        assert_eq!(tools.len(), 9);
     }
 
     #[test]

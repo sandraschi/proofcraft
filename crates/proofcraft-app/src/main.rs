@@ -116,6 +116,12 @@ struct ProofCraftApp {
     new_prob_budget: u32,
     new_dir_name: String,
     new_dir_claim: String,
+    new_arxiv_id: String,
+    lean_code: String,
+    lean_output: String,
+    show_copilot: bool,
+    copilot_input: String,
+    copilot_messages: Vec<(String, String)>,
     provers_per_round: u32,
     show_palette: bool,
     palette_query: String,
@@ -153,6 +159,12 @@ impl ProofCraftApp {
             new_prob_budget: 200,
             new_dir_name: String::new(),
             new_dir_claim: String::new(),
+            new_arxiv_id: String::new(),
+            lean_code: "theorem sanity : 1 + 1 = 2 := rfl".to_string(),
+            lean_output: String::new(),
+            show_copilot: false,
+            copilot_input: String::new(),
+            copilot_messages: Vec::new(),
             provers_per_round: 2,
             show_palette: false,
             palette_query: String::new(),
@@ -367,6 +379,9 @@ impl eframe::App for ProofCraftApp {
                         apply_skin(&ctx, &self.prefs);
                         save_prefs(&self.prefs);
                     }
+                    if ui.selectable_label(self.show_copilot, "Copilot").clicked() {
+                        self.show_copilot = !self.show_copilot;
+                    }
                 });
             });
 
@@ -469,6 +484,58 @@ impl eframe::App for ProofCraftApp {
                 });
             });
 
+        if self.show_copilot {
+            egui::Panel::right("proof_copilot")
+                .default_size(320.0)
+                .show(ui, |ui| {
+                    ui.heading(RichText::new("Proof Copilot").color(pal.text));
+                    let model_label = if self.provider.default_model.is_empty() {
+                        "No model discovered"
+                    } else {
+                        &self.provider.default_model
+                    };
+                    ui.label(
+                        RichText::new(format!(
+                            "{} | {}",
+                            self.provider.kind.as_str(),
+                            model_label
+                        ))
+                        .small()
+                        .color(pal.accent),
+                    );
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .max_height(ui.available_height() - 90.0)
+                        .show(ui, |ui| {
+                            for (role, text) in &self.copilot_messages {
+                                ui.label(RichText::new(role).strong().color(pal.accent));
+                                ui.label(RichText::new(text).color(pal.text));
+                                ui.add_space(6.0);
+                            }
+                        });
+                    ui.separator();
+                    ui.text_edit_multiline(&mut self.copilot_input);
+                    ui.horizontal(|ui| {
+                        if ui.button("Ask Copilot").clicked() && !self.copilot_input.trim().is_empty()
+                        {
+                            let prompt = self.copilot_input.trim().to_string();
+                            self.copilot_messages.push(("You".to_string(), prompt.clone()));
+                            self.copilot_input.clear();
+                            let sys = "You are the proofcraft mathematical copilot. Be rigorous and concise.";
+                            match proofcraft_core::llm::complete(&self.provider, "", sys, &prompt) {
+                                Ok(ans) => self.copilot_messages.push(("Copilot".to_string(), ans)),
+                                Err(e) => self
+                                    .copilot_messages
+                                    .push(("Error (configure in Settings)".to_string(), e.to_string())),
+                            }
+                        }
+                        if ui.button("Clear").clicked() {
+                            self.copilot_messages.clear();
+                        }
+                    });
+                });
+        }
+
         egui::CentralPanel::default().show(ui, |ui| {
             let detail: Option<ProblemDetail> = if self.selected_problem_id.is_empty() {
                 None
@@ -502,11 +569,18 @@ impl eframe::App for ProofCraftApp {
                             &d,
                             &mut self.new_dir_name,
                             &mut self.new_dir_claim,
+                            &mut self.new_arxiv_id,
                             &self.store,
                             &mut self.status_msg,
                         ),
                         MainTab::Rounds => render_rounds(ui, &pal, &d),
-                        MainTab::Ledger => render_ledger(ui, &pal, &d),
+                        MainTab::Ledger => render_ledger(
+                            ui,
+                            &pal,
+                            &d,
+                            &mut self.lean_code,
+                            &mut self.lean_output,
+                        ),
                         MainTab::Advisor => render_advisor(ui, &pal, &d),
                         MainTab::Manuscript => render_manuscript(
                             ui,
@@ -562,5 +636,36 @@ impl eframe::App for ProofCraftApp {
                     ui.label("License: MIT OR Apache-2.0");
                 });
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_skins_have_distinct_high_contrast_palettes() {
+        for skin in Skin::ALL {
+            let p = palette(skin);
+            assert_ne!(p.bg, p.text);
+            assert_ne!(p.card, p.text);
+            assert!(!skin.label().is_empty());
+        }
+    }
+
+    #[test]
+    fn ui_prefs_defaults_and_roundtrip_json() {
+        let prefs = UiPrefs::default();
+        assert_eq!(prefs.zoom_factor, 1.0);
+        assert!(prefs.show_tab_bar);
+        let raw = serde_json::to_string(&prefs).expect("serialize");
+        let back: UiPrefs = serde_json::from_str(&raw).expect("deserialize");
+        assert_eq!(back.skin, prefs.skin);
+    }
+
+    #[test]
+    fn smoke_test_passes_on_embedded_seed() {
+        assert_eq!(run_smoke_test(), 0);
     }
 }

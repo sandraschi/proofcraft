@@ -1,5 +1,7 @@
 pub mod harness;
 pub mod help;
+pub mod lean;
+pub mod literature;
 pub mod llm;
 pub mod model;
 pub mod store;
@@ -65,6 +67,13 @@ pub enum Command {
     RunRound {
         problem_id: String,
         provers: u32,
+    },
+    AddLiterature {
+        problem_id: String,
+        arxiv_id: String,
+    },
+    CheckLean {
+        code: String,
     },
     ClearDemoData,
     LoadDemoData,
@@ -145,6 +154,18 @@ pub fn dispatch(
                 provers.max(1),
             )?;
             Ok(serde_json::to_value(report)?)
+        }
+        Command::AddLiterature {
+            problem_id,
+            arxiv_id,
+        } => {
+            let lit = literature::fetch_arxiv_metadata(&arxiv_id)?;
+            store.add_literature(&problem_id, &lit)?;
+            Ok(serde_json::to_value(lit)?)
+        }
+        Command::CheckLean { code } => {
+            let res = lean::check_lean_snippet(&code);
+            Ok(serde_json::to_value(res)?)
         }
         Command::ClearDemoData => {
             store.clear_all()?;

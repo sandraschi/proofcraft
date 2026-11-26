@@ -1,3 +1,4 @@
+use crate::literature::LiteratureRef;
 use crate::model::{
     AdvisorNote, Attempt, Direction, DirectionStatus, LedgerEntry, LedgerKind, Problem,
     ProblemDetail, ProblemStatus, SeedBundle, Verdict,
@@ -100,6 +101,14 @@ impl ProofStore {
                 round INTEGER NOT NULL,
                 observation TEXT NOT NULL,
                 instruction_delta TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS literature (
+                id TEXT PRIMARY KEY,
+                problem_id TEXT NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+                arxiv_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                url TEXT NOT NULL
             );",
         )?;
         Ok(())
@@ -186,7 +195,8 @@ impl ProofStore {
     pub fn clear_all(&self) -> Result<()> {
         let conn = self.lock_conn()?;
         conn.execute_batch(
-            "DELETE FROM advisor_notes;
+            "DELETE FROM literature;
+             DELETE FROM advisor_notes;
              DELETE FROM ledger;
              DELETE FROM attempts;
              DELETE FROM directions;
@@ -341,6 +351,26 @@ impl ProofStore {
         Ok(())
     }
 
+    pub fn add_literature(&self, problem_id: &str, lit: &LiteratureRef) -> Result<()> {
+        let conn = self.lock_conn()?;
+        let affected = conn.execute(
+            "INSERT OR REPLACE INTO literature (id, problem_id, arxiv_id, title, summary, url)
+             SELECT ?1, id, ?3, ?4, ?5, ?6 FROM problems WHERE id = ?2",
+            params![
+                lit.id,
+                problem_id,
+                lit.arxiv_id,
+                lit.title,
+                lit.summary,
+                lit.url
+            ],
+        )?;
+        if affected == 0 {
+            return Err(ProofError::NotFound(format!("problem {problem_id}")));
+        }
+        Ok(())
+    }
+
     pub fn update_problem_progress(
         &self,
         problem_id: &str,
@@ -472,12 +502,29 @@ impl ProofStore {
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
+        let mut lit_stmt = conn2.prepare(
+            "SELECT id, arxiv_id, title, summary, url
+             FROM literature WHERE problem_id = ?1 ORDER BY rowid ASC",
+        )?;
+        let literature = lit_stmt
+            .query_map(params![problem_id], |row| {
+                Ok(LiteratureRef {
+                    id: row.get(0)?,
+                    arxiv_id: row.get(1)?,
+                    title: row.get(2)?,
+                    summary: row.get(3)?,
+                    url: row.get(4)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
         Ok(ProblemDetail {
             problem,
             directions,
             attempts,
             ledger,
             advisor_notes,
+            literature,
         })
     }
 

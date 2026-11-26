@@ -50,6 +50,15 @@ pub fn build_prover_briefing(detail: &ProblemDetail, prover_idx: u32) -> String 
     {
         out.push_str(&format!("- {}: {}\n", l.title, l.statement));
     }
+    if !detail.literature.is_empty() {
+        out.push_str("\nGrounded Literature References:\n");
+        for r in &detail.literature {
+            out.push_str(&format!(
+                "- [arXiv:{}] {}: {}\n",
+                r.arxiv_id, r.title, r.summary
+            ));
+        }
+    }
     if !detail.advisor_notes.is_empty() {
         out.push_str("\nProcess Advisor Standing Instructions:\n");
         for n in &detail.advisor_notes {
@@ -101,53 +110,42 @@ pub fn execute_round(
 
     let mut calls_spent = 0u32;
     let mut round_attempts = Vec::new();
+    let use_parallel = !matches!(
+        provider.kind,
+        crate::model::ProviderKind::Ollama | crate::model::ProviderKind::LmStudio
+    ) && num_provers > 1;
 
-    for idx in 1..=num_provers {
-        let base_brief = build_prover_briefing(&detail, idx);
-        let briefing = llm::complete(
-            provider,
-            &routing.summarizer_model,
-            "You are a Cogentic Summarizer. Condense the prior record and ledger into a focused briefing for one independent prover.",
-            &base_brief,
-        )?;
-        calls_spent += 1;
-
-        let draft = llm::complete(
-            provider,
-            &routing.prover_model,
-            "You are a Cogentic Prover. Write a complete, rigorous mathematical proof. State every assumption explicitly.",
-            &briefing,
-        )?;
-        calls_spent += 1;
-
-        let single_raw = llm::complete(
-            provider,
-            &routing.verifier_model,
-            "You are an Adversarial Verifier. Assume EVERY step is wrong and EVERY citation is false until justified. First line MUST be PASS or FAIL, followed by your exact objection.",
-            &draft,
-        )?;
-        calls_spent += 1;
-        let (single_verdict, single_objection) = parse_verdict_response(&single_raw);
-
-        let attempt = Attempt {
-            id: format!(
-                "att-r{}-p{}-{}",
-                next_round,
-                idx,
-                &Uuid::new_v4().to_string()[..6]
-            ),
-            round: next_round,
-            prover: format!("Prover-{idx}"),
-            direction_id: direction_id.clone(),
-            method: format!("Round {next_round} autonomous direction"),
-            summary: draft.lines().take(2).collect::<Vec<_>>().join(" "),
-            draft_markdown: draft,
-            single_verdict,
-            single_objection,
-            comp_verdict: Verdict::Pending,
-            comp_objection: String::new(),
-        };
-        round_attempts.push(attempt);
+    if use_parallel {
+        let results: Vec<Result<(Attempt, u32)>> = std::thread::scope(|s| {
+            let handles: Vec<_> = (1..=num_provers)
+                .map(|idx| {
+                    let detail_ref = &detail;
+                    let dir_ref = &direction_id;
+                    s.spawn(move || {
+                        run_single_prover(detail_ref, provider, routing, next_round, idx, dir_ref)
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| {
+                    h.join()
+                        .map_err(|_| ProofError::Provider("prover thread panicked".to_string()))?
+                })
+                .collect()
+        });
+        for item in results {
+            let (att, c) = item?;
+            calls_spent += c;
+            round_attempts.push(att);
+        }
+    } else {
+        for idx in 1..=num_provers {
+            let (att, c) =
+                run_single_prover(&detail, provider, routing, next_round, idx, &direction_id)?;
+            calls_spent += c;
+            round_attempts.push(att);
+        }
     }
 
     // Comparative verifier across all drafts in this round
@@ -232,4 +230,53 @@ pub fn execute_round(
         verified_solution_found,
         advisor_delta: note.instruction_delta,
     })
+}
+
+fn run_single_prover(
+    detail: &ProblemDetail,
+    provider: &ProviderConfig,
+    routing: &RoleRouting,
+    next_round: u32,
+    idx: u32,
+    direction_id: &str,
+) -> Result<(Attempt, u32)> {
+    let base_brief = build_prover_briefing(detail, idx);
+    let briefing = llm::complete(
+        provider,
+        &routing.summarizer_model,
+        "You are a Cogentic Summarizer. Condense the prior record and ledger into a focused briefing for one independent prover.",
+        &base_brief,
+    )?;
+    let draft = llm::complete(
+        provider,
+        &routing.prover_model,
+        "You are a Cogentic Prover. Write a complete, rigorous mathematical proof. State every assumption explicitly.",
+        &briefing,
+    )?;
+    let single_raw = llm::complete(
+        provider,
+        &routing.verifier_model,
+        "You are an Adversarial Verifier. Assume EVERY step is wrong and EVERY citation is false until justified. First line MUST be PASS or FAIL, followed by your exact objection.",
+        &draft,
+    )?;
+    let (single_verdict, single_objection) = parse_verdict_response(&single_raw);
+    let attempt = Attempt {
+        id: format!(
+            "att-r{}-p{}-{}",
+            next_round,
+            idx,
+            &Uuid::new_v4().to_string()[..6]
+        ),
+        round: next_round,
+        prover: format!("Prover-{idx}"),
+        direction_id: direction_id.to_string(),
+        method: format!("Round {next_round} autonomous direction"),
+        summary: draft.lines().take(2).collect::<Vec<_>>().join(" "),
+        draft_markdown: draft,
+        single_verdict,
+        single_objection,
+        comp_verdict: Verdict::Pending,
+        comp_objection: String::new(),
+    };
+    Ok((attempt, 3))
 }

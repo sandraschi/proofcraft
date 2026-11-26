@@ -21,11 +21,12 @@ Inspired by [Cogentic: Multi-Agent Orchestration for Automated Proof Discovery](
 | Hard Budget Cap (calls / rounds / USD failsafe) | `Implemented` | Enforced before each round starts |
 | Live LLM Discovery (Ollama, LM Studio, OpenAI-Compat, Gemini, Anthropic) | `Implemented` | Excludes embed-only models; masked key status |
 | Hybrid Role Routing (local 4090 + API overrides) | `Implemented` | Separate model overrides for Prover, Verifier, Summarizer, Advisor |
-| Pure-Rust CLI & MCP Stdio (`2026-07-28`) | `Implemented` | `proofcraft-mcp mcp`, 7 tools + `skill://` resource |
-| Native `egui` Studio (3 skins, Help Center, Settings, Export) | `Implemented` | `--smoke-test` headless gate included |
+| Pure-Rust CLI & MCP Stdio (`2026-07-28`) | `Implemented` | `proofcraft-mcp mcp`, 9 tools + `skill://` resource |
+| Native `egui` Studio (3 skins, Help Center, Settings, Copilot, Export) | `Implemented` | `--smoke-test` headless gate included |
 | Markdown & LaTeX Manuscript Export | `Implemented` | Saves `.md` or `.tex` with verified lemmas |
-| Optional Lean 4 (`lake env lean`) sub-lemma check | `Planned` | Subprocess formalizer hook |
-| Live `arxiv-mcp` Literature Reviewer dispatch | `Planned` | Mid-run citation & theorem retrieval |
+| Grounded Literature Reviewer (arXiv Atom fetch) | `Implemented` | Attaches real arXiv titles & abstracts to prover briefings |
+| Optional Lean 4 (`lean --stdin`) sub-lemma check | `Implemented` | Subprocess formalizer check when `lean` is on PATH |
+| Concurrent Prover Dispatch (API providers) | `Implemented` | `std::thread::scope` for APIs; queued for local 4090 |
 
 ## Quick Start
 

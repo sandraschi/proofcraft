@@ -243,3 +243,96 @@ fn advisor_note_and_ledger_entry_persist() {
     assert_eq!(detail.ledger.len(), 1);
     assert_eq!(detail.advisor_notes.len(), 1);
 }
+
+#[test]
+fn arxiv_id_normalization_and_atom_parse() {
+    use crate::literature::{normalize_arxiv_id, parse_arxiv_atom};
+
+    assert_eq!(
+        normalize_arxiv_id("https://arxiv.org/abs/2609.40324v2"),
+        "2609.40324v2"
+    );
+    assert_eq!(normalize_arxiv_id("arxiv:1706.03762"), "1706.03762");
+
+    let sample_xml = r#"<feed><entry>
+        <title>Cogentic: Multi-Agent   Proof Discovery</title>
+        <summary>Iterative prove-verify loop.</summary>
+    </entry></feed>"#;
+    let parsed = parse_arxiv_atom(sample_xml, "2609.40324").expect("parse");
+    assert_eq!(parsed.title, "Cogentic: Multi-Agent Proof Discovery");
+    assert_eq!(parsed.summary, "Iterative prove-verify loop.");
+    assert_eq!(parsed.url, "https://arxiv.org/abs/2609.40324");
+}
+
+#[test]
+fn literature_persists_on_problem_and_briefing() {
+    use crate::literature::LiteratureRef;
+
+    let store = ProofStore::open_in_memory().expect("db");
+    let p = store.create_problem("P", "D", "S", 100).expect("p");
+    store
+        .add_literature(
+            &p.id,
+            &LiteratureRef {
+                id: "lit-2609".to_string(),
+                arxiv_id: "2609.40324".to_string(),
+                title: "Cogentic".to_string(),
+                summary: "Prove-verify loop".to_string(),
+                url: "https://arxiv.org/abs/2609.40324".to_string(),
+            },
+        )
+        .expect("add lit");
+    let detail = store.get_problem_detail(&p.id).expect("detail");
+    assert_eq!(detail.literature.len(), 1);
+    let brief = build_prover_briefing(&detail, 1);
+    assert!(brief.contains("Grounded Literature References"));
+    assert!(brief.contains("2609.40324"));
+}
+
+#[test]
+fn lean_check_returns_structured_result() {
+    use crate::lean::check_lean_snippet;
+
+    let res = check_lean_snippet("theorem t : 1 + 1 = 2 := rfl");
+    // Regardless of whether lean is installed on host, it must never panic
+    if !res.available {
+        assert!(!res.passed);
+        assert!(res.stderr.contains("not found"));
+    }
+}
+
+#[test]
+fn dispatch_add_direction_and_export_manuscript() {
+    let store = ProofStore::open_in_memory().expect("db");
+    store.load_embedded_seed().expect("seed");
+    let dir_val = dispatch(
+        &store,
+        &ProviderConfig::default(),
+        &RoleRouting::default(),
+        &BudgetConfig::default(),
+        Command::AddDirection {
+            problem_id: "prob-anytime-experts".to_string(),
+            name: "Potential Function".to_string(),
+            claim: "Use hyperbolic cosine potential.".to_string(),
+        },
+    )
+    .expect("add dir");
+    assert_eq!(dir_val["name"], "Potential Function");
+
+    let exp = dispatch(
+        &store,
+        &ProviderConfig::default(),
+        &RoleRouting::default(),
+        &BudgetConfig::default(),
+        Command::ExportManuscript {
+            problem_id: "prob-anytime-experts".to_string(),
+            format: "tex".to_string(),
+        },
+    )
+    .expect("export");
+    assert_eq!(exp["format"], "tex");
+    assert!(exp["manuscript"]
+        .as_str()
+        .unwrap()
+        .contains("\\documentclass{article}"));
+}

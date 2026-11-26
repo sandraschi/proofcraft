@@ -62,12 +62,14 @@ pub fn badge(ui: &mut egui::Ui, label: &str, color: Color32) {
         });
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_workspace(
     ui: &mut egui::Ui,
     pal: &Palette,
     detail: &ProblemDetail,
     new_dir_name: &mut String,
     new_dir_claim: &mut String,
+    new_arxiv_id: &mut String,
     store: &ProofStore,
     status_msg: &mut String,
 ) {
@@ -153,6 +155,49 @@ pub fn render_workspace(
             }
         }
     });
+
+    ui.add_space(10.0);
+    ui.heading(RichText::new("Grounded Literature (arXiv)").color(pal.text));
+    if detail.literature.is_empty() {
+        ui.label(
+            RichText::new(
+                "No arXiv references attached yet. Fetch one below to ground prover citations.",
+            )
+            .color(pal.muted),
+        );
+    } else {
+        for lit in &detail.literature {
+            egui::Frame::new()
+                .fill(pal.card)
+                .stroke(Stroke::new(1.0, pal.border))
+                .corner_radius(6.0)
+                .inner_margin(8.0)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        badge(ui, &format!("arXiv:{}", lit.arxiv_id), pal.accent);
+                        ui.label(RichText::new(&lit.title).strong().color(pal.text));
+                    });
+                    ui.label(RichText::new(&lit.summary).color(pal.muted));
+                });
+            ui.add_space(4.0);
+        }
+    }
+    ui.horizontal(|ui| {
+        ui.label("arXiv ID or URL:");
+        ui.text_edit_singleline(new_arxiv_id);
+        if ui.button("Fetch & Attach").clicked() {
+            match proofcraft_core::literature::fetch_arxiv_metadata(new_arxiv_id) {
+                Ok(lit) => match store.add_literature(&detail.problem.id, &lit) {
+                    Ok(_) => {
+                        *status_msg = format!("Attached arXiv:{}", lit.arxiv_id);
+                        new_arxiv_id.clear();
+                    }
+                    Err(e) => *status_msg = format!("DB error: {e}"),
+                },
+                Err(e) => *status_msg = format!("arXiv fetch error: {e}"),
+            }
+        }
+    });
 }
 
 pub fn render_rounds(ui: &mut egui::Ui, pal: &Palette, detail: &ProblemDetail) {
@@ -229,7 +274,13 @@ fn verdict_color(v: Verdict, pal: &Palette) -> Color32 {
     }
 }
 
-pub fn render_ledger(ui: &mut egui::Ui, pal: &Palette, detail: &ProblemDetail) {
+pub fn render_ledger(
+    ui: &mut egui::Ui,
+    pal: &Palette,
+    detail: &ProblemDetail,
+    lean_code: &mut String,
+    lean_output: &mut String,
+) {
     ui.heading(RichText::new("Verified Ledger & Excluded Dead Ends").color(pal.text));
     ui.label(
         RichText::new(
@@ -238,6 +289,31 @@ pub fn render_ledger(ui: &mut egui::Ui, pal: &Palette, detail: &ProblemDetail) {
         .color(pal.muted),
     );
     ui.add_space(8.0);
+
+    ui.collapsing(
+        "Optional Lean 4 Sub-Lemma Check (local `lean --stdin`)",
+        |ui| {
+            ui.text_edit_multiline(lean_code);
+            if ui.button("Run Lean 4 Check").clicked() {
+                let res = proofcraft_core::lean::check_lean_snippet(lean_code);
+                *lean_output = if !res.available {
+                    res.stderr
+                } else if res.passed {
+                    "PASS: Lean 4 accepted snippet with 0 errors.".to_string()
+                } else {
+                    format!("FAIL:\n{}\n{}", res.stdout, res.stderr)
+                };
+            }
+            if !lean_output.is_empty() {
+                ui.label(
+                    RichText::new(lean_output.as_str())
+                        .monospace()
+                        .color(pal.muted),
+                );
+            }
+        },
+    );
+    ui.add_space(6.0);
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         for entry in &detail.ledger {
