@@ -68,8 +68,9 @@ theorem sumTo_formula (n : Nat) : 2 * sumTo n = n * (n + 1) := by
 
 ---
 
-## 3. Usage (GUI / CLI / MCP)
+## 4. Usage (GUI / CLI / MCP)
 
+- **Fastest Install:** just tell Claude / agy / Cursor: *"install proofcraft from gh sandraschi"*.
 - **GUI Shortcuts:** `Ctrl+Wheel` zoom, `Ctrl+B` toggle tab bar, `Ctrl+K` command palette, `Ctrl+,` settings.
 - **Launchers:** Double-click `start.bat` (or `mcp-central-docs/starts/proofcraft-start.bat`), or run `.\start.ps1 -Smoke` / `.\start.ps1 -Mcp`.
 - **CLI:** `proofcraft-mcp status`, `proofcraft-mcp list-problems`, `proofcraft-mcp add-literature --problem-id <id> --arxiv-id 2609.40324`, `proofcraft-mcp run-round --problem-id <id> --provers 2`, `proofcraft-mcp lean-status`, `proofcraft-mcp check-lean --code "..."`, `proofcraft-mcp formalize-lemma --problem-id <id> --ledger-id <lem>`, `proofcraft-mcp consolidate --problem-id <id> --format tex`.

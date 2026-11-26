@@ -49,6 +49,12 @@ A **`Max Calls: 200`** budget cap means `proofcraft` refuses to start a new roun
 
 ## Quick Start
 
+**Fastest way:** just tell Claude / agy / Cursor:
+
+> *"install proofcraft from gh sandraschi"*
+
+Or from a terminal:
+
 ```powershell
 # Build and run all checks
 just ci
