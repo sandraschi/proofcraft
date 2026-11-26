@@ -112,7 +112,7 @@ impl HelpTab {
                 "- Record Dead Ends: Refuted bounds in the Verified Ledger save huge call budgets in later rounds."
             ),
             Self::Pitfalls => concat!(
-                "- Hard Budget Caps: Never raise Max Calls/Run blindly; each round uses 3*N + 2 calls (plus 1 per auto-formalized lemma).\n",
+                "- Hard Budget Caps (What is a 'call'?): One 'call' = one single LLM inference request (one prompt sent to Ollama/LM Studio/API and one completion returned). Each round with N provers spends 3*N + 2 calls (1 Summarizer + 1 Prover + 1 Individual Verifier per prover, plus 1 Comparative Verifier + 1 Process Advisor, plus 1 per salvaged lemma audit and +1 if Lean 4 auto-formalize is enabled). Max Calls stops new rounds before crossing the cap.\n",
                 "- Lean 4 `sorry` Trap: Lean exits 0 with a warning if `sorry` is present. proofcraft blocks `sorry` and `admit` automatically, so a `LEAN 4 VERIFIED` badge means zero holes.\n",
                 "- Mathlib Imports: Standalone `lean --stdin` only includes Lean 4 core. To use `import Mathlib`, point `Lake Project Dir` in Settings at a built Lake workspace.\n",
                 "- API Keys: Stored via environment variables (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) or masked in Settings; never commit `.env`."

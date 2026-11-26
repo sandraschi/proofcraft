@@ -4,6 +4,19 @@
 
 Inspired by [Cogentic: Multi-Agent Orchestration for Automated Proof Discovery](https://arxiv.org/abs/2609.40324) (arXiv:2609.40324v2), `proofcraft` brings the iterative prove-verify-ledger architecture to a local-first workstation (RTX 4090 / Ollama / LM Studio + optional frontier APIs).
 
+![How to use proofcraft (Cogentic + Lean 4)](docs/proofcraft-comic.jpg)
+
+## What is a "Call"? (Budget & Round Math)
+
+A **call** is **one single LLM inference request** (one prompt sent to Ollama, LM Studio, Gemini, Anthropic, or OpenAI-Compat, and one completion returned).
+
+Each Cogentic round with $N$ provers spends:
+- **3 calls per prover:** `1` Summarizer briefing + `1` Prover draft + `1` Individual Adversarial Verifier.
+- **+ 2 calls per round:** `1` Cross-Draft Comparative Verifier + `1` Process Advisor.
+- **+ 1 call per salvaged lemma** (when the Isolated Lemma Auditor re-verifies a fragment on its own, plus `+1` if **Auto-formalize in Lean 4** is enabled).
+
+A **`Max Calls: 200`** budget cap means `proofcraft` refuses to start a new round if it would exceed 200 total LLM requests on that problem, preventing runaway API bills or endless overnight GPU loops. (In the Cogentic paper, solving an open research problem took ~100 to ~1,000 total model calls.)
+
 ## Architecture
 
 - **`crates/proofcraft-core` (L1):** SQLite-backed Record & Verified Ledger, independent Summarizer briefings, Prover + Two-Tier Adversarial Verifier loop, Isolated Lemma Auditor, non-mathematical Process Advisor, live LLM provider discovery, and hard call/round/USD budget caps.

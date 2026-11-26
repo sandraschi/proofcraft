@@ -17,7 +17,20 @@ Single-shot LLM generation is rarely enough for open research problems that requ
 
 ---
 
-## 2. Lean 4 Formal Verification (Core Capability)
+## 2. What is a "Call"? (Budget & Round Math)
+
+A **call** is **one single LLM inference request** (one prompt sent to Ollama, LM Studio, Gemini, Anthropic, or OpenAI-Compat, and one completion returned).
+
+Each round with $N$ provers spends **`3*N + 2` calls**:
+- **3 calls per prover:** `1` Summarizer briefing + `1` Prover draft + `1` Individual Adversarial Verifier.
+- **+ 2 calls per round:** `1` Cross-Draft Comparative Verifier + `1` Process Advisor.
+- **+ 1 call per salvaged lemma** (Isolated Lemma Auditor re-verification, plus `+1` if **Auto-formalize in Lean 4** is enabled).
+
+Setting `Max Calls: 200` means `proofcraft` stops before crossing 200 total LLM requests on that problem, protecting against runaway API spend or infinite overnight local GPU loops.
+
+---
+
+## 3. Lean 4 Formal Verification (Core Capability)
 
 Natural-language proofs can still conceal subtle gaps. `proofcraft` integrates **Lean 4** (`elan` / `lean` / `lake`) directly into the Verified Ledger and round pipeline:
 
