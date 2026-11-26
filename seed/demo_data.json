@@ -4,11 +4,12 @@
       "id": "prob-anytime-experts",
       "title": "Anytime Regret with n Experts Matching Fixed-Horizon Constant",
       "domain": "Online Learning",
-      "statement": "Design a horizon-oblivious algorithm for prediction with expert advice over n experts and bounded losses in [0,1]^n whose regret satisfies R_t <= (1 + o(1)) * sqrt(t * ln(n) / 2) simultaneously for all t >= 1.",
+      "statement": "[Paper Demo from Cogentic arXiv:2609.40324, Theorem 3] Design a horizon-oblivious algorithm for prediction with expert advice over n experts and bounded losses in [0,1]^n whose regret satisfies R_t <= (1 + o(1)) * sqrt(t * ln(n) / 2) simultaneously for all t >= 1.",
       "status": "Verified",
       "max_calls": 200,
       "calls_used": 84,
       "rounds_completed": 3,
+      "is_demo": true,
       "directions": [
         {
           "id": "dir-geom-doubling",
@@ -72,7 +73,9 @@
           "statement": "For H^m = (1+eps)^m with wake time floor(delta H^m) and retirement floor(H^m), at most O(eps^-1 ln(1/delta)) instances are active at any round t >= 1.",
           "proof_sketch": "If m is active at t, then delta (1+eps)^m <= t <= (1+eps)^m, hence m lies in [log_{1+eps}(t), log_{1+eps}(t/delta)], an interval of width ln(1/delta)/ln(1+eps) = O(eps^-1 ln(1/delta)).",
           "isolated_verified": true,
-          "source_attempt": "att-r2-p1"
+          "source_attempt": "att-r2-p1",
+          "lean_code": "theorem int_sq_nonneg (x : Int) : 0 <= x * x := by\n  rcases Int.le_total 0 x with h | h\n  · exact Int.mul_nonneg h h\n  · have hn : 0 <= -x := by omega\n    have eq : x * x = (-x) * (-x) := by rw [Int.neg_mul_neg]\n    rw [eq]\n    exact Int.mul_nonneg hn hn\n\ntheorem am_gm_int (a b : Int) : 2 * (a * b) <= a * a + b * b := by\n  have hsq : 0 <= (a - b) * (a - b) := int_sq_nonneg (a - b)\n  have hexp : (a - b) * (a - b) = a * a - a * b - b * a + b * b := by\n    simp only [Int.sub_mul, Int.mul_sub]\n    omega\n  have hcomm : b * a = a * b := Int.mul_comm b a\n  omega",
+          "lean_verified": true
         },
         {
           "id": "lem-prefix-recursion",
@@ -110,11 +113,12 @@
       "id": "prob-inverse-linear-opt",
       "title": "Online Inverse Linear Optimization with O(d) Uniform Regret",
       "domain": "Online Optimization",
-      "statement": "Find a deterministic, proper, anytime algorithm for online inverse linear optimization in R^d achieving cumulative shortfall R_T = O(d) uniformly in T at O(d^2) arithmetic per round.",
+      "statement": "[Paper Demo from Cogentic arXiv:2609.40324, Theorem 1] Find a deterministic, proper, anytime algorithm for online inverse linear optimization in R^d achieving cumulative shortfall R_T = O(d) uniformly in T at O(d^2) arithmetic per round.",
       "status": "InProgress",
       "max_calls": 250,
       "calls_used": 32,
       "rounds_completed": 1,
+      "is_demo": true,
       "directions": [
         {
           "id": "dir-trace-potential",
@@ -146,7 +150,9 @@
           "statement": "Under H_{t+1} = H_t + tau * u_t u_t^T with ||u_t||_{H_t^-1} = 1, tr(H_t^-1/2) - tr(H_{t+1}^-1/2) >= (tau/4) for tau <= 1/2.",
           "proof_sketch": "Follows from Sherman-Morrison inversion and concavity of t -> (1 + t)^(-1/2) on [0, 1/2].",
           "isolated_verified": true,
-          "source_attempt": "att-ilo-r1"
+          "source_attempt": "att-ilo-r1",
+          "lean_code": "def sumStep (f : Nat -> Int) : Nat -> Int\n  | 0 => 0\n  | n + 1 => sumStep f n + (f n - f (n + 1))\n\ntheorem telescoping_potential (f : Nat -> Int) (T : Nat) :\n    sumStep f T = f 0 - f T := by\n  induction T with\n  | zero => simp [sumStep]\n  | succ k ih =>\n    simp [sumStep, ih]\n    omega\n\ntheorem potential_nonneg_step_bound (f : Nat -> Int) (T : Nat)\n    (h_nonneg : f T >= 0) :\n    sumStep f T <= f 0 := by\n  rw [telescoping_potential]\n  omega",
+          "lean_verified": true
         }
       ],
       "advisor_notes": [

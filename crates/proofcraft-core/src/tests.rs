@@ -524,6 +524,7 @@ fn helper_formatters_produce_expected_output() {
         max_calls: 100,
         calls_used: 12,
         rounds_completed: 2,
+        is_demo: false,
     };
     assert!(problem_summary_line(&p).contains("12 calls / 100 max"));
 

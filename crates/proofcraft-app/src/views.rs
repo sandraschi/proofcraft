@@ -3,14 +3,15 @@ use eframe::egui::{self, Color32, RichText, Stroke};
 use proofcraft_core::help::HelpTab;
 use proofcraft_core::llm::{discover_models, key_status_badge};
 use proofcraft_core::model::{
-    BudgetConfig, DiscoveryResult, LedgerKind, ProblemDetail, ProviderConfig, ProviderKind,
-    RoleRouting, Verdict,
+    BudgetConfig, DiscoveryResult, LedgerKind, ProblemDetail, ProblemStatus, ProviderConfig,
+    ProviderKind, RoleRouting, Verdict,
 };
 use proofcraft_core::store::ProofStore;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MainTab {
     Workspace,
+    Kanban,
     Rounds,
     Ledger,
     Advisor,
@@ -20,8 +21,9 @@ pub enum MainTab {
 }
 
 impl MainTab {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Workspace,
+        Self::Kanban,
         Self::Rounds,
         Self::Ledger,
         Self::Advisor,
@@ -33,6 +35,7 @@ impl MainTab {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Workspace => "Workspace",
+            Self::Kanban => "Kanban",
             Self::Rounds => "Rounds & Verifiers",
             Self::Ledger => "Verified Ledger",
             Self::Advisor => "Process Advisor",
@@ -75,6 +78,11 @@ pub fn render_workspace(
 ) {
     ui.heading(RichText::new(&detail.problem.title).color(pal.text));
     ui.horizontal(|ui| {
+        if detail.problem.is_demo {
+            badge(ui, "PAPER DEMO (arXiv:2609.40324)", pal.warn);
+        } else {
+            badge(ui, "LOCAL WORKSPACE", pal.accent);
+        }
         badge(ui, &detail.problem.domain, pal.accent);
         badge(ui, detail.problem.status.as_str(), pal.pass);
         ui.label(
@@ -87,6 +95,16 @@ pub fn render_workspace(
             .color(pal.muted),
         );
     });
+    if detail.problem.is_demo {
+        ui.add_space(4.0);
+        ui.label(
+            RichText::new(
+                "Pre-loaded example from the Cogentic paper with verified Lean 4 core lemmas. Nothing is running on your PC until you click 'Run Proof Round'.",
+            )
+            .small()
+            .color(pal.warn),
+        );
+    }
     ui.add_space(6.0);
 
     let frac = (detail.problem.calls_used as f32 / detail.problem.max_calls.max(1) as f32).min(1.0);
@@ -196,6 +214,132 @@ pub fn render_workspace(
                 },
                 Err(e) => *status_msg = format!("arXiv fetch error: {e}"),
             }
+        }
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn render_kanban(
+    ui: &mut egui::Ui,
+    pal: &Palette,
+    store: &ProofStore,
+    selected_problem_id: &mut String,
+    active_tab: &mut MainTab,
+    round_running: bool,
+) {
+    ui.heading(RichText::new("Proof Discovery Kanban").color(pal.text));
+    ui.label(
+        RichText::new(
+            "Pipeline across Queued, In Progress, Verified, and Budget-Capped problems. Demo cards come from Cogentic (arXiv:2609.40324).",
+        )
+        .color(pal.muted),
+    );
+    ui.add_space(8.0);
+
+    let problems = store.list_problems().unwrap_or_default();
+    let cols_spec = [
+        ("Queued", ProblemStatus::Queued, pal.muted),
+        ("In Progress", ProblemStatus::InProgress, pal.accent),
+        ("Verified", ProblemStatus::Verified, pal.pass),
+        ("Budget Cap", ProblemStatus::BudgetExhausted, pal.fail),
+    ];
+
+    ui.columns(4, |cols| {
+        for (idx, (col_title, target_status, col_color)) in cols_spec.iter().enumerate() {
+            let col_ui = &mut cols[idx];
+            let items: Vec<_> = problems
+                .iter()
+                .filter(|p| p.status == *target_status)
+                .collect();
+            egui::Frame::new()
+                .fill(pal.panel)
+                .stroke(Stroke::new(1.0, col_color.linear_multiply(0.5)))
+                .corner_radius(6.0)
+                .inner_margin(8.0)
+                .show(col_ui, |ui| {
+                    ui.horizontal(|ui| {
+                        badge(ui, col_title, *col_color);
+                        ui.label(
+                            RichText::new(format!("({})", items.len()))
+                                .strong()
+                                .color(pal.muted),
+                        );
+                    });
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .id_salt(format!("kanban_col_{idx}"))
+                        .show(ui, |ui| {
+                            if items.is_empty() {
+                                ui.label(RichText::new("Empty").small().color(pal.muted));
+                            }
+                            for p in items {
+                                let detail = store.get_problem_detail(&p.id).ok();
+                                let lean_count = detail
+                                    .as_ref()
+                                    .map(|d| d.ledger.iter().filter(|l| l.lean_verified).count())
+                                    .unwrap_or(0);
+                                let lem_count = detail
+                                    .as_ref()
+                                    .map(|d| {
+                                        d.ledger
+                                            .iter()
+                                            .filter(|l| l.kind == LedgerKind::VerifiedLemma)
+                                            .count()
+                                    })
+                                    .unwrap_or(0);
+
+                                egui::Frame::new()
+                                    .fill(pal.card)
+                                    .stroke(Stroke::new(1.0, pal.border))
+                                    .corner_radius(6.0)
+                                    .inner_margin(8.0)
+                                    .show(ui, |ui| {
+                                        ui.label(RichText::new(&p.title).strong().color(pal.text));
+                                        ui.horizontal_wrapped(|ui| {
+                                            if p.is_demo {
+                                                badge(ui, "PAPER DEMO", pal.warn);
+                                            } else {
+                                                badge(ui, "LOCAL", pal.accent);
+                                            }
+                                            if round_running && *selected_problem_id == p.id {
+                                                badge(ui, "RUNNING ON PC", pal.pass);
+                                            } else if p.status == ProblemStatus::InProgress {
+                                                badge(ui, "PAUSED", pal.muted);
+                                            }
+                                        });
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "{} | R{} | {}/{} calls",
+                                                p.domain,
+                                                p.rounds_completed,
+                                                p.calls_used,
+                                                p.max_calls
+                                            ))
+                                            .small()
+                                            .color(pal.muted),
+                                        );
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "Lemmas: {lem_count} | Lean 4: {lean_count}"
+                                            ))
+                                            .small()
+                                            .color(pal.pass),
+                                        );
+                                        ui.horizontal(|ui| {
+                                            if ui.small_button("Open").clicked() {
+                                                *selected_problem_id = p.id.clone();
+                                                *active_tab = MainTab::Workspace;
+                                            }
+                                            if ui.small_button("Ledger").clicked() {
+                                                *selected_problem_id = p.id.clone();
+                                                *active_tab = MainTab::Ledger;
+                                            }
+                                        });
+                                    });
+                                ui.add_space(6.0);
+                            }
+                        });
+                });
         }
     });
 }

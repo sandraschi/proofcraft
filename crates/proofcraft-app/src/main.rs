@@ -12,8 +12,8 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use theme::{apply_skin, load_prefs, palette, save_prefs, Skin, UiPrefs};
 use views::{
-    render_advisor, render_help, render_ledger, render_manuscript, render_rounds, render_settings,
-    render_workspace, MainTab, SettingsSection,
+    render_advisor, render_help, render_kanban, render_ledger, render_manuscript, render_rounds,
+    render_settings, render_workspace, MainTab, SettingsSection,
 };
 
 fn default_db_path() -> PathBuf {
@@ -443,8 +443,12 @@ impl eframe::App for ProofCraftApp {
                 let problems = self.store.list_problems().unwrap_or_default();
                 for p in &problems {
                     let selected = p.id == self.selected_problem_id;
+                    let prefix = if p.is_demo { "DEMO " } else { "" };
                     if ui
-                        .selectable_label(selected, format!("[{}] {}", p.status.as_str(), p.title))
+                        .selectable_label(
+                            selected,
+                            format!("[{}{}] {}", prefix, p.status.as_str(), p.title),
+                        )
                         .clicked()
                     {
                         self.selected_problem_id = p.id.clone();
@@ -568,6 +572,14 @@ impl eframe::App for ProofCraftApp {
             };
 
             match self.active_tab {
+                MainTab::Kanban => render_kanban(
+                    ui,
+                    &pal,
+                    &self.store,
+                    &mut self.selected_problem_id,
+                    &mut self.active_tab,
+                    self.round_running,
+                ),
                 MainTab::Help => render_help(ui, &pal, &mut self.help_tab),
                 MainTab::Settings => render_settings(
                     ui,
@@ -619,7 +631,7 @@ impl eframe::App for ProofCraftApp {
                             &mut self.export_tex,
                             &mut self.status_msg,
                         ),
-                        MainTab::Help | MainTab::Settings => {}
+                        MainTab::Kanban | MainTab::Help | MainTab::Settings => {}
                     }
                 }
             }
@@ -700,7 +712,7 @@ mod tests {
 
     #[test]
     fn all_main_tabs_have_non_empty_labels() {
-        assert_eq!(MainTab::ALL.len(), 7);
+        assert_eq!(MainTab::ALL.len(), 8);
         for tab in MainTab::ALL {
             assert!(!tab.label().is_empty());
         }
@@ -751,7 +763,11 @@ mod tests {
             let mut bud_mut = budget.clone();
             let mut disc = None;
 
+            let mut sel_pid = detail.problem.id.clone();
+            let mut active_tab = MainTab::Kanban;
+
             let mut full_output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                render_kanban(ui, &pal, &store, &mut sel_pid, &mut active_tab, false);
                 render_workspace(
                     ui,
                     &pal,

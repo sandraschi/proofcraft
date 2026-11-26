@@ -111,6 +111,8 @@ pub struct Problem {
     pub max_calls: u32,
     pub calls_used: u32,
     pub rounds_completed: u32,
+    #[serde(default)]
+    pub is_demo: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,6 +181,8 @@ pub struct SeedProblem {
     pub max_calls: u32,
     pub calls_used: u32,
     pub rounds_completed: u32,
+    #[serde(default)]
+    pub is_demo: bool,
     pub directions: Vec<Direction>,
     pub attempts: Vec<Attempt>,
     pub ledger: Vec<LedgerEntry>,

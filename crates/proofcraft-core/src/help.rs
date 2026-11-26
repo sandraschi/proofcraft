@@ -133,15 +133,37 @@ impl HelpTab {
 }
 
 pub const LEAN_EXAMPLE_INDUCTION: &str = concat!(
-    "def sumTo : Nat -> Nat\n",
+    "-- 1. Telescoping Potential Descent (Cogentic Theorem 1 trace-potential backbone)\n",
+    "def sumStep (f : Nat -> Int) : Nat -> Int\n",
     "  | 0 => 0\n",
-    "  | n + 1 => sumTo n + (n + 1)\n\n",
-    "theorem sumTo_formula (n : Nat) : 2 * sumTo n = n * (n + 1) := by\n",
-    "  induction n with\n",
-    "  | zero => rfl\n",
+    "  | n + 1 => sumStep f n + (f n - f (n + 1))\n\n",
+    "theorem telescoping_potential (f : Nat -> Int) (T : Nat) :\n",
+    "    sumStep f T = f 0 - f T := by\n",
+    "  induction T with\n",
+    "  | zero => simp [sumStep]\n",
     "  | succ k ih =>\n",
-    "    simp [sumTo, Nat.mul_add, Nat.add_mul, ih]\n",
-    "    omega"
+    "    simp [sumStep, ih]\n",
+    "    omega\n\n",
+    "theorem potential_nonneg_step_bound (f : Nat -> Int) (T : Nat)\n",
+    "    (h_nonneg : f T >= 0) :\n",
+    "    sumStep f T <= f 0 := by\n",
+    "  rw [telescoping_potential]\n",
+    "  omega\n\n",
+    "-- 2. Square Non-negativity & AM-GM Inequality in Pure Lean 4 Core\n",
+    "theorem int_sq_nonneg (x : Int) : 0 <= x * x := by\n",
+    "  rcases Int.le_total 0 x with h | h\n",
+    "  · exact Int.mul_nonneg h h\n",
+    "  · have hn : 0 <= -x := by omega\n",
+    "    have eq : x * x = (-x) * (-x) := by rw [Int.neg_mul_neg]\n",
+    "    rw [eq]\n",
+    "    exact Int.mul_nonneg hn hn\n\n",
+    "theorem am_gm_int (a b : Int) : 2 * (a * b) <= a * a + b * b := by\n",
+    "  have hsq : 0 <= (a - b) * (a - b) := int_sq_nonneg (a - b)\n",
+    "  have hexp : (a - b) * (a - b) = a * a - a * b - b * a + b * b := by\n",
+    "    simp only [Int.sub_mul, Int.mul_sub]\n",
+    "    omega\n",
+    "  have hcomm : b * a = a * b := Int.mul_comm b a\n",
+    "  omega"
 );
 
 pub const BUNDLED_SKILL_MD: &str = r#"---

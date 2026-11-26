@@ -62,7 +62,8 @@ impl ProofStore {
                 status TEXT NOT NULL,
                 max_calls INTEGER NOT NULL,
                 calls_used INTEGER NOT NULL,
-                rounds_completed INTEGER NOT NULL
+                rounds_completed INTEGER NOT NULL,
+                is_demo INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS directions (
                 id TEXT PRIMARY KEY,
@@ -122,6 +123,14 @@ impl ProofStore {
             "ALTER TABLE ledger ADD COLUMN lean_verified INTEGER NOT NULL DEFAULT 0",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE problems ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "UPDATE problems SET is_demo = 1 WHERE id IN ('prob-anytime-experts', 'prob-inverse-linear-opt')",
+            [],
+        );
         Ok(())
     }
 
@@ -132,8 +141,8 @@ impl ProofStore {
         for sp in bundle.problems {
             conn.execute(
                 "INSERT OR IGNORE INTO problems
-                 (id, title, domain, statement, status, max_calls, calls_used, rounds_completed)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                 (id, title, domain, statement, status, max_calls, calls_used, rounds_completed, is_demo)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     sp.id,
                     sp.title,
@@ -142,7 +151,8 @@ impl ProofStore {
                     sp.status.as_str(),
                     sp.max_calls,
                     sp.calls_used,
-                    sp.rounds_completed
+                    sp.rounds_completed,
+                    if sp.is_demo { 1 } else { 0 }
                 ],
             )?;
             for d in sp.directions {
@@ -177,8 +187,8 @@ impl ProofStore {
             for l in sp.ledger {
                 conn.execute(
                     "INSERT OR IGNORE INTO ledger
-                     (id, problem_id, kind, title, statement, proof_sketch, isolated_verified, source_attempt)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                     (id, problem_id, kind, title, statement, proof_sketch, isolated_verified, source_attempt, lean_code, lean_verified)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                     params![
                         l.id,
                         sp.id,
@@ -187,9 +197,18 @@ impl ProofStore {
                         l.statement,
                         l.proof_sketch,
                         if l.isolated_verified { 1 } else { 0 },
-                        l.source_attempt
+                        l.source_attempt,
+                        l.lean_code,
+                        if l.lean_verified { 1 } else { 0 }
                     ],
                 )?;
+                if !l.lean_code.is_empty() {
+                    let _ = conn.execute(
+                        "UPDATE ledger SET lean_code = ?2, lean_verified = ?3
+                         WHERE id = ?1 AND lean_code = ''",
+                        params![l.id, l.lean_code, if l.lean_verified { 1 } else { 0 }],
+                    );
+                }
             }
             for n in sp.advisor_notes {
                 conn.execute(
@@ -219,11 +238,12 @@ impl ProofStore {
     pub fn list_problems(&self) -> Result<Vec<Problem>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, title, domain, statement, status, max_calls, calls_used, rounds_completed
+            "SELECT id, title, domain, statement, status, max_calls, calls_used, rounds_completed, is_demo
              FROM problems ORDER BY rowid ASC",
         )?;
         let rows = stmt.query_map([], |row| {
             let status_str: String = row.get(4)?;
+            let demo_int: i64 = row.get(8)?;
             Ok(Problem {
                 id: row.get(0)?,
                 title: row.get(1)?,
@@ -233,6 +253,7 @@ impl ProofStore {
                 max_calls: row.get(5)?,
                 calls_used: row.get(6)?,
                 rounds_completed: row.get(7)?,
+                is_demo: demo_int != 0,
             })
         })?;
         let mut out = Vec::new();
@@ -263,11 +284,12 @@ impl ProofStore {
             max_calls: max_calls.max(10),
             calls_used: 0,
             rounds_completed: 0,
+            is_demo: false,
         };
         let conn = self.lock_conn()?;
         conn.execute(
-            "INSERT INTO problems (id, title, domain, statement, status, max_calls, calls_used, rounds_completed)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO problems (id, title, domain, statement, status, max_calls, calls_used, rounds_completed, is_demo)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0)",
             params![
                 problem.id,
                 problem.title,
@@ -458,11 +480,12 @@ impl ProofStore {
         let conn = self.lock_conn()?;
         let problem = conn
             .query_row(
-                "SELECT id, title, domain, statement, status, max_calls, calls_used, rounds_completed
+                "SELECT id, title, domain, statement, status, max_calls, calls_used, rounds_completed, is_demo
                  FROM problems WHERE id = ?1",
                 params![problem_id],
                 |row| {
                     let status_str: String = row.get(4)?;
+                    let demo_int: i64 = row.get(8)?;
                     Ok(Problem {
                         id: row.get(0)?,
                         title: row.get(1)?,
@@ -472,6 +495,7 @@ impl ProofStore {
                         max_calls: row.get(5)?,
                         calls_used: row.get(6)?,
                         rounds_completed: row.get(7)?,
+                        is_demo: demo_int != 0,
                     })
                 },
             )
