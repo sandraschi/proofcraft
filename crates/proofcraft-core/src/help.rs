@@ -22,8 +22,8 @@ impl HelpTab {
 
     pub fn title(&self) -> &'static str {
         match self {
-            Self::GetStarted => "Get Started",
-            Self::Functions => "Functions",
+            Self::GetStarted => "Get Started & Paper",
+            Self::Functions => "Functions & Lean 4",
             Self::Usage => "Usage (GUI / CLI / MCP)",
             Self::Tips => "Tips & Tricks",
             Self::Pitfalls => "Pitfalls & Safety",
@@ -35,63 +35,95 @@ impl HelpTab {
     pub fn body(&self) -> &'static str {
         match self {
             Self::GetStarted => concat!(
-                "Welcome to proofcraft -- a pure-Rust multi-agent automated proof discovery studio ",
-                "modeled on Cogentic (arXiv:2609.40324).\n\n",
-                "1. On first launch, proofcraft loads two realistic demo problems into SQLite ",
-                "(Anytime Regret with n Experts, and Online Inverse Linear Optimization).\n",
-                "2. Open Settings (Ctrl+,) -> LLM & Providers to run Live Model Discovery against ",
-                "local Ollama / LM Studio on your RTX 4090 or configure Gemini / Anthropic / OpenAI-Compat keys.\n",
-                "3. Assign fast local models to Summarizer & Process Advisor, and your strongest ",
-                "reasoning model to Prover & Adversarial Verifiers.\n",
-                "4. Click 'Run Proof Round' (or use proofcraft-cli / proofcraft-mcp) to execute a ",
-                "bounded prove-verify-ledger round."
+                "THE ORIGINAL PAPER: COGENTIC (arXiv:2609.40324)\n",
+                "Title: Cogentic: Multi-Agent Orchestration for Automated Proof Discovery\n",
+                "Authors: Yang Cai, Vineet Gupta, Yanchen Jiang, Christopher Liaw, Aranyak Mehta, Grigoris Velegkas, Di Wang (Google Research / Google DeepMind / Yale)\n",
+                "URL: https://arxiv.org/abs/2609.40324  |  Results: https://sites.google.com/view/cogentic\n\n",
+                "Why this paper matters:\n",
+                "Frontier models can often spot a clever mathematical idea in one shot, but open research problems require exploring competing conjectures, surviving subtle technical obstructions, and remembering intermediate progress over long horizons. Cogentic solves this with a lean, disk-backed prove-verify-ledger loop that used only O(100) model calls for most problems and O(1000) calls for the hardest -- small enough to orchestrate on a single lab PC.\n\n",
+                "Results proved autonomously by Cogentic (verified by domain experts):\n",
+                "1. Online Inverse Linear Optimization: First efficient and proper O(d) regret bound uniform in T, at O(d^2) per round (replacing log det with a self-normalized tr(H_t^-1/2) potential).\n",
+                "2. Two-Sided Bulow-Klemperer Competition Complexity: Tight +2 sellers on the smaller side suffice (down from >= 20,000 on both sides).\n",
+                "3. Anytime Regret with n Experts: Matches the fixed-horizon leading constant sqrt(t ln n / 2) simultaneously for all t >= 1.\n",
+                "4. Simple vs. Optimal Revenue (Single Additive Buyer): Improved approximation factor from 5.2 down to 3.52.\n",
+                "5. Price of Anarchy for Autobidding Auctions: Tight 1.5 PoA for 2 bidders (pFPA_1) and 2 - 1/(4n+1) for n bidders (pFPA_2n).\n\n",
+                "QUICK START IN PROOFCRAFT\n",
+                "1. On first launch, proofcraft seeds two demo problems into SQLite (Anytime Regret with n Experts, and Online Inverse Linear Optimization).\n",
+                "2. Open Settings (Ctrl+,) -> LLM & Providers, pick Ollama/LM Studio (local RTX 4090) or Gemini/Anthropic/OpenAI-Compat, and click 'Test Connection & Discover Models'.\n",
+                "3. Verify Lean 4 is detected in the bottom status bar (e.g. Lean 4.36.0 via ~/.elan/bin).\n",
+                "4. Click 'Run Proof Round' in the left sidebar or inspect the Verified Ledger."
             ),
             Self::Functions => concat!(
-                "Core Cogentic Pipeline:\n",
-                "- Orchestrator: allocates provers across competing directions without mathematical bias.\n",
-                "- Independent Summarizers: build separate briefings per prover from Record + Ledger.\n",
-                "- Parallel Provers: draft candidate natural-language proofs.\n",
-                "- Individual Adversarial Verifier: assumes every step and citation is false until proven.\n",
-                "- Comparative Verifier: reads all drafts in a round side-by-side to spot shared blind spots.\n",
-                "- Ledger Auditor: extracts partial lemmas from failed drafts and re-verifies them in isolation.\n",
-                "- Process Advisor: updates standing prover/verifier rigor rules across rounds.\n",
-                "- Manuscript Exporter: compiles accepted proofs + verified lemmas to Markdown or LaTeX."
+                "COGENTIC MULTI-AGENT PIPELINE\n",
+                "- Orchestrator: Tracks global state and allocates prover slots across competing directions. Barred from holding mathematical opinions.\n",
+                "- Literature Reviewers: Fetch real arXiv titles and abstracts into SQLite and inject them into prover briefings so citations stay grounded.\n",
+                "- Independent Summarizers: Write separate, context-bounded briefings per prover from the Record and Verified Ledger so parallel provers do not suffer groupthink.\n",
+                "- Parallel Provers: Draft candidate proofs concurrently (via std::thread::scope for APIs, queued for single-GPU local models).\n",
+                "- Two-Tier Adversarial Verifiers: Every draft must pass BOTH an Individual Verifier (assuming every step and citation is false until justified) AND a Cross-Draft Comparative Verifier (reading all drafts side-by-side to catch shared blind spots).\n",
+                "- Verified Ledger & Isolated Auditor: Extracts partial lemmas from failed drafts, re-verifies each in isolation, and logs refuted bounds as Excluded Dead Ends.\n",
+                "- Process Advisor: Reads verification logs across rounds to tighten prover/verifier rigor instructions without steering the math.\n",
+                "- Consolidation Stage: Polishes accepted proofs and exports Markdown (.md) or LaTeX (.tex).\n\n",
+                "LEAN 4 FORMAL VERIFICATION (CORE ENGINE)\n",
+                "Natural-language proofs can still hide subtle gaps. proofcraft integrates Lean 4 directly as a mechanical truth anchor:\n",
+                "- Toolchain Resolution: Automatically detects `lean` and `lake` on PATH or in `%USERPROFILE%\\.elan\\bin`.\n",
+                "- Anti-Cheating `sorry` / `admit` Guard: Lean 4 exits 0 with a warning when a proof contains `sorry` or `admit`. proofcraft scans non-comment tokens and rejects any proof containing `sorry` or `admit`.\n",
+                "- Lake / Mathlib Workspaces: Set a `Lake Project Dir` (containing `lakefile.lean` or `lakefile.toml`) in Settings to run checks via `lake env lean --stdin` with full Mathlib imports.\n",
+                "- One-Click Lemma Formalization: On any Verified Lemma card, click 'Formalize & Verify in Lean 4' to translate the lemma into Lean 4 and persist the verified proof.\n\n",
+                "EXAMPLE LEAN 4 CODE (RUNNABLE IN THE LEDGER SCRATCHPAD)\n\n",
+                "-- Example 1: Arithmetic identity (kernel reduction)\n",
+                "theorem sum_two_squares : (3 : Nat)^2 + 4^2 = 5^2 := rfl\n\n",
+                "-- Example 2: Universal quantifier + omega/simp in pure Lean 4\n",
+                "theorem add_comm_twice (a b : Nat) : a + b + a = 2 * a + b := by\n",
+                "  omega\n\n",
+                "-- Example 3: Inductive proof (sum of first n naturals)\n",
+                "def sumTo : Nat -> Nat\n",
+                "  | 0 => 0\n",
+                "  | n + 1 => sumTo n + (n + 1)\n\n",
+                "theorem sumTo_formula (n : Nat) : 2 * sumTo n = n * (n + 1) := by\n",
+                "  induction n with\n",
+                "  | zero => rfl\n",
+                "  | succ k ih =>\n",
+                "    simp [sumTo, Nat.mul_add, Nat.add_mul, ih]\n",
+                "    omega"
             ),
             Self::Usage => concat!(
-                "GUI:\n",
-                "- Switch views via the topbar tabs (toggle with Ctrl+B) or the Window menu.\n",
-                "- Zoom any window with Ctrl + Mouse Wheel.\n",
-                "- Switch skins (Dark, Light, Ivory Proof) in View -> Interface Theme or Settings (Ctrl+,).\n\n",
-                "CLI (proofcraft-mcp):\n",
-                "- proofcraft-mcp status --json\n",
-                "- proofcraft-mcp list-problems --json\n",
-                "- proofcraft-mcp run-round --problem-id prob-anytime-experts --provers 2\n",
-                "- proofcraft-mcp export --problem-id prob-anytime-experts --format tex\n\n",
-                "MCP Stdio Server:\n",
-                "- Run `proofcraft-mcp mcp` (pure JSON-RPC on stdout, diagnostics on stderr)."
+                "GUI WORKFLOW\n",
+                "- Tabs: Workspace, Rounds & Verifiers, Verified Ledger, Process Advisor, Manuscript, Help Center, Settings.\n",
+                "- Shortcuts: Ctrl+Wheel (zoom), Ctrl+B (show/hide tab bar), Ctrl+K (command palette), Ctrl+, (settings).\n",
+                "- Skins: Obsidian Dark, Crisp Light, and Ivory Proof (warm paper theme for long reading).\n",
+                "- Copilot Dock: Click 'Copilot' in the top-right bar for interactive math Q&A.\n\n",
+                "CLI (proofcraft-mcp)\n",
+                "- proofcraft-mcp status\n",
+                "- proofcraft-mcp list-problems\n",
+                "- proofcraft-mcp add-literature --problem-id <id> --arxiv-id 2609.40324\n",
+                "- proofcraft-mcp run-round --problem-id <id> --provers 2\n",
+                "- proofcraft-mcp lean-status\n",
+                "- proofcraft-mcp check-lean --code \"theorem t : 1 + 1 = 2 := rfl\"\n",
+                "- proofcraft-mcp formalize-lemma --problem-id <id> --ledger-id <lem>\n",
+                "- proofcraft-mcp consolidate --problem-id <id> --format tex\n\n",
+                "MCP STDIO SERVER (2026-07-28, 12 TOOLS)\n",
+                "- Launch via `proofcraft-mcp mcp` or `start.bat -Mcp`.\n",
+                "- Tools: proof_status, proof_list_problems, proof_get_problem, proof_create_problem, proof_ledger, proof_export_manuscript, proof_run_round, proof_add_literature, proof_check_lean, proof_lean_status, proof_formalize_lemma, proof_consolidate."
             ),
             Self::Tips => concat!(
-                "- Hybrid Role Routing: Run Qwen/DeepSeek on your local RTX 4090 (Ollama/LM Studio) ",
-                "for Summarizers and Process Advisor, saving ~40-60% of API calls.\n",
-                "- Dead Ends matter: Record failed counterexamples in the Verified Ledger so future ",
-                "rounds never waste budget revisiting refuted bounds.\n",
-                "- Start with 2 provers and a 30-call budget cap on new problems to calibrate difficulty."
+                "- Hybrid 4090 + API Routing: Run a local 30B model in Ollama/LM Studio for Summarizers and Process Advisor, and reserve frontier API calls for Provers and Adversarial Verifiers.\n",
+                "- Always Attach arXiv References: Use 'Fetch & Attach' in Workspace so provers see real abstracts instead of guessing theorem statements.\n",
+                "- Enable Auto-Formalize in Settings: Turn on 'Auto-formalize promoted lemmas in Lean 4' when working on discrete math, combinatorics, or elementary inequalities.\n",
+                "- Record Dead Ends: Refuted bounds in the Verified Ledger save huge call budgets in later rounds."
             ),
             Self::Pitfalls => concat!(
-                "- Budget Explosions: proofcraft enforces a hard call cap and round cap before every ",
-                "round starts. Never disable caps on untrusted loops.\n",
-                "- Sycophantic Verification: Both verifiers use adversarial system prompts, but weak ",
-                "verifier models can still miss subtle gaps. Always inspect the Manuscript Export yourself.\n",
-                "- API Keys: Keys are read from environment variables (GEMINI_API_KEY, ANTHROPIC_API_KEY, ",
-                "OPENAI_API_KEY) or Settings; never commit .env files."
+                "- Hard Budget Caps: Never raise Max Calls/Run blindly; each round uses 3*N + 2 calls (plus 1 per auto-formalized lemma).\n",
+                "- Lean 4 `sorry` Trap: Lean exits 0 with a warning if `sorry` is present. proofcraft blocks `sorry` and `admit` automatically, so a `LEAN 4 VERIFIED` badge means zero holes.\n",
+                "- Mathlib Imports: Standalone `lean --stdin` only includes Lean 4 core. To use `import Mathlib`, point `Lake Project Dir` in Settings at a built Lake workspace.\n",
+                "- API Keys: Stored via environment variables (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) or masked in Settings; never commit `.env`."
             ),
             Self::Planned => concat!(
-                "- Optional Lean 4 (`lake env lean`) subprocess verification for formalizable sub-lemmas.\n",
-                "- Live `arxiv-mcp` Literature Reviewer hook for mid-run citation & theorem retrieval.\n",
-                "- Multi-threaded concurrent API dispatch for large prover pools."
+                "- `arxiv-mcp` / Semantic Scholar full-text PDF ingestion for mid-run Literature Reviewer dispatches.\n",
+                "- Multi-file Lake project generation (exporting an entire verified manuscript as a compilable `.lean` project).\n",
+                "- Round-by-round token & USD cost telemetry charts in the Workspace view."
             ),
             Self::OtherCrafts => concat!(
-                "- rsicraft: Evolutionary code/program search & local LoRA self-improvement (Frontis-MA1).\n",
+                "- rsicraft: Evolutionary code/program search & local LoRA self-improvement (Frontis-MA1) -- uses numeric execution fitness, whereas proofcraft uses adversarial proof verification + Lean 4.\n",
                 "- logiccraft: Formal logic & truth-table/SAT tooling.\n",
                 "- writercraft: Long-form technical & academic authoring.\n",
                 "- devcraft: Fleet orchestration, claims, and build telemetry."
@@ -100,11 +132,23 @@ impl HelpTab {
     }
 }
 
+pub const LEAN_EXAMPLE_INDUCTION: &str = concat!(
+    "def sumTo : Nat -> Nat\n",
+    "  | 0 => 0\n",
+    "  | n + 1 => sumTo n + (n + 1)\n\n",
+    "theorem sumTo_formula (n : Nat) : 2 * sumTo n = n * (n + 1) := by\n",
+    "  induction n with\n",
+    "  | zero => rfl\n",
+    "  | succ k ih =>\n",
+    "    simp [sumTo, Nat.mul_add, Nat.add_mul, ih]\n",
+    "    omega"
+);
+
 pub const BUNDLED_SKILL_MD: &str = r#"---
 name: proofcraft
-description: Orchestrate Cogentic-style multi-agent mathematical proof discovery via proofcraft-mcp.
+description: Orchestrate Cogentic-style multi-agent mathematical proof discovery and Lean 4 formalization via proofcraft-mcp.
 ---
 # proofcraft Skill
 
-Use `proofcraft-mcp` tools to manage problems, inspect the Verified Ledger, run bounded prove-verify rounds, and export LaTeX/Markdown manuscripts.
+Use `proofcraft-mcp` tools to manage problems, attach arXiv literature, inspect the Verified Ledger, run bounded prove-verify rounds, verify lemmas in Lean 4, and export LaTeX/Markdown manuscripts.
 "#;

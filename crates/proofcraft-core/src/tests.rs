@@ -630,6 +630,14 @@ fn bundled_skill_md_contains_frontmatter() {
 }
 
 #[test]
+fn help_lean_example_induction_passes_real_lean4() {
+    let res = crate::lean::check_lean_snippet(crate::help::LEAN_EXAMPLE_INDUCTION);
+    assert!(res.available);
+    assert!(res.passed, "Help Lean 4 example failed: {}", res.stderr);
+    assert!(!res.sorry_detected);
+}
+
+#[test]
 fn dispatch_add_direction_and_export_manuscript() {
     let store = ProofStore::open_in_memory().expect("db");
     store.load_embedded_seed().expect("seed");

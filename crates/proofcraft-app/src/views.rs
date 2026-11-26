@@ -297,19 +297,36 @@ pub fn render_ledger(
     ui.add_space(8.0);
 
     ui.collapsing(
-        "Optional Lean 4 Sub-Lemma Check (local `lean --stdin`)",
+        "Lean 4 Formal Verification (`lean --stdin` / Lake)",
         |ui| {
+            ui.label(
+                RichText::new(
+                    "Checks pure Lean 4 core or a configured Lake/Mathlib workspace. Rejects `sorry` and `admit`.",
+                )
+                .small()
+                .color(pal.muted),
+            );
             ui.text_edit_multiline(lean_code);
-            if ui.button("Run Lean 4 Check").clicked() {
-                let res = proofcraft_core::lean::check_lean_snippet(lean_code);
-                *lean_output = if !res.available {
-                    res.stderr
-                } else if res.passed {
-                    "PASS: Lean 4 accepted snippet with 0 errors.".to_string()
-                } else {
-                    format!("FAIL:\n{}\n{}", res.stdout, res.stderr)
-                };
-            }
+            ui.horizontal(|ui| {
+                if ui.button("Run Lean 4 Check").clicked() {
+                    let pdir = if budget.lake_project_dir.trim().is_empty() {
+                        None
+                    } else {
+                        Some(std::path::Path::new(budget.lake_project_dir.trim()))
+                    };
+                    let res = proofcraft_core::lean::check_lean_in_project(lean_code, pdir);
+                    *lean_output = if !res.available {
+                        res.stderr
+                    } else if res.passed {
+                        "PASS: Lean 4 accepted snippet with 0 errors and 0 sorrys.".to_string()
+                    } else {
+                        format!("FAIL:\n{}\n{}", res.stdout, res.stderr)
+                    };
+                }
+                if ui.button("Load Induction Example").clicked() {
+                    *lean_code = proofcraft_core::help::LEAN_EXAMPLE_INDUCTION.to_string();
+                }
+            });
             if !lean_output.is_empty() {
                 ui.label(
                     RichText::new(lean_output.as_str())

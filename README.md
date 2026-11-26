@@ -25,7 +25,7 @@ Inspired by [Cogentic: Multi-Agent Orchestration for Automated Proof Discovery](
 | Native `egui` Studio (3 skins, Help Center, Settings, Copilot, Export) | `Implemented` | `--smoke-test` headless gate included |
 | Markdown & LaTeX Manuscript Export | `Implemented` | Saves `.md` or `.tex` with verified lemmas |
 | Grounded Literature Reviewer (arXiv Atom fetch) | `Implemented` | Attaches real arXiv titles & abstracts to prover briefings |
-| Optional Lean 4 (`lean --stdin`) sub-lemma check | `Implemented` | Subprocess formalizer check when `lean` is on PATH |
+| Lean 4 Formal Verification (`lean --stdin` + Lake/Mathlib + `sorry` guard) | `Implemented` | Core truth anchor; rejects `sorry`/`admit`; one-click & auto-formalize |
 | Concurrent Prover Dispatch (API providers) | `Implemented` | `std::thread::scope` for APIs; queued for local 4090 |
 
 ## Quick Start
