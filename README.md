@@ -1,51 +1,10 @@
 # proofcraft
 
-**Cogentic-style multi-agent automated proof discovery studio -- pure Rust (L1 core, L2 CLI + MCP, L3 egui).**
+**Cogentic-style multi-agent automated proof discovery studio with Lean 4 -- pure Rust (L1 core, L2 CLI + MCP, L3 egui).**
 
-Inspired by [Cogentic: Multi-Agent Orchestration for Automated Proof Discovery](https://arxiv.org/abs/2609.40324) (arXiv:2609.40324v2), `proofcraft` brings the iterative prove-verify-ledger architecture to a local-first workstation (RTX 4090 / Ollama / LM Studio + optional frontier APIs).
+Inspired by [Cogentic: Multi-Agent Orchestration for Automated Proof Discovery](https://arxiv.org/abs/2609.40324) (arXiv:2609.40324v2), `proofcraft` brings the iterative prove-verify-ledger architecture to a local-first workstation (RTX 4090 / Ollama / LM Studio + optional frontier APIs + Lean 4 / Lake / Mathlib).
 
 ![How to use proofcraft (Cogentic + Lean 4)](docs/proofcraft-comic.jpg)
-
-## What is a "Call"? (Budget & Round Math)
-
-A **call** is **one single LLM inference request** (one prompt sent to Ollama, LM Studio, Gemini, Anthropic, or OpenAI-Compat, and one completion returned).
-
-Each Cogentic round with $N$ provers spends:
-- **3 calls per prover:** `1` Summarizer briefing + `1` Prover draft + `1` Individual Adversarial Verifier.
-- **+ 2 calls per round:** `1` Cross-Draft Comparative Verifier + `1` Process Advisor.
-- **+ 1 call per salvaged lemma** (when the Isolated Lemma Auditor re-verifies a fragment on its own, plus `+1` if **Auto-formalize in Lean 4** is enabled).
-
-A **`Max Calls: 200`** budget cap means `proofcraft` refuses to start a new round if it would exceed 200 total LLM requests on that problem, preventing runaway API bills or endless overnight GPU loops. (In the Cogentic paper, solving an open research problem took ~100 to ~1,000 total model calls.)
-
-## What Math Level Do You Need?
-
-- **To play around and understand the workflow (High school / 1st-year undergrad):** If you know basic algebra, inequalities ($2ab \le a^2 + b^2$), proof by induction, and what a lemma vs. counterexample is, the Kanban board, adversarial verifiers, Verified Ledger, and Lean 4 `PASS`/`FAIL` checks all make immediate sense.
-- **To run your own problems (Undergrad discrete math / CS):** Combinatorics, graph properties, algorithm invariants, recurrence bounds, and elementary number theory work great. With **Lean 4** enabled, `lean --stdin` + the `sorry`/`admit` guard mechanically checks every step.
-- **To audit the two pre-loaded `PAPER DEMO` problems (Grad-level TCS / optimization):** Those two examples come from STOC/FOCS online learning theory. You do not need that level to run `proofcraft` on your own problems, but for *unformalized* natural-language proofs (without `LEAN 4 VERIFIED`), only trust proofs in domains where you can check the steps yourself.
-
-## Architecture
-
-- **`crates/proofcraft-core` (L1):** SQLite-backed Record & Verified Ledger, independent Summarizer briefings, Prover + Two-Tier Adversarial Verifier loop, Isolated Lemma Auditor, non-mathematical Process Advisor, live LLM provider discovery, and hard call/round/USD budget caps.
-- **`crates/proofcraft-mcp` (L2):** `clap` CLI and pure-Rust MCP `2026-07-28` stdio server (`proofcraft-mcp mcp`) with `skill://proofcraft/SKILL.md` resource.
-- **`crates/proofcraft-app` (L3):** Native `eframe`/`egui 0.37` desktop studio with three high-contrast skins (Obsidian Dark, Crisp Light, Ivory Proof), `Ctrl+Wheel` zoom, universal menu bar, hideable tab bar (`Ctrl+B`), 7-tab Help Center, and full-window Settings (`Ctrl+,`).
-
-## Feature Matrix
-
-| Feature | Status | Notes |
-|---|---|---|
-| SQLite Record, Directions, & Verified Ledger | `Implemented` | Auto-loads `seed/demo_data.json` on empty DB |
-| Two-Tier Adversarial Verification (Single + Comparative) | `Implemented` | Both verdicts required to mark a problem `Verified` |
-| Isolated Lemma Auditor & Dead-End Exclusion | `Implemented` | Re-verifies salvaged fragments in isolation |
-| Process Advisor (non-mathematical meta-instructions) | `Implemented` | Updates standing instructions per round |
-| Hard Budget Cap (calls / rounds / USD failsafe) | `Implemented` | Enforced before each round starts |
-| Live LLM Discovery (Ollama, LM Studio, OpenAI-Compat, Gemini, Anthropic) | `Implemented` | Excludes embed-only models; masked key status |
-| Hybrid Role Routing (local 4090 + API overrides) | `Implemented` | Separate model overrides for Prover, Verifier, Summarizer, Advisor |
-| Pure-Rust CLI & MCP Stdio (`2026-07-28`) | `Implemented` | `proofcraft-mcp mcp`, 9 tools + `skill://` resource |
-| Native `egui` Studio (3 skins, Help Center, Settings, Copilot, Export) | `Implemented` | `--smoke-test` headless gate included |
-| Markdown & LaTeX Manuscript Export | `Implemented` | Saves `.md` or `.tex` with verified lemmas |
-| Grounded Literature Reviewer (arXiv Atom fetch) | `Implemented` | Attaches real arXiv titles & abstracts to prover briefings |
-| Lean 4 Formal Verification (`lean --stdin` + Lake/Mathlib + `sorry` guard) | `Implemented` | Core truth anchor; rejects `sorry`/`admit`; one-click & auto-formalize |
-| Concurrent Prover Dispatch (API providers) | `Implemented` | `std::thread::scope` for APIs; queued for local 4090 |
 
 ## Quick Start
 
@@ -56,19 +15,44 @@ A **`Max Calls: 200`** budget cap means `proofcraft` refuses to start a new roun
 Or from a terminal:
 
 ```powershell
-# Build and run all checks
+# Launch desktop studio (builds incrementally and opens GUI)
+.\start.bat
+
+# Run checks, tests, or MCP stdio server
 just ci
-
-# Launch desktop studio
-cargo run -p proofcraft-app
-
-# Run headless smoke test
-cargo run -p proofcraft-app -- --smoke-test
-
-# Run CLI or MCP stdio server
-cargo run -p proofcraft-mcp -- status
-cargo run -p proofcraft-mcp -- mcp
+.\start.ps1 -Smoke
+.\start.ps1 -Mcp
 ```
+
+## Documentation Stack
+
+| Guide | Covers |
+|---|---|
+| [Math, Cogentic & Calls](docs/MATH_AND_COGENTIC.md) | Required math levels, Cogentic paper (`arXiv:2609.40324`), what a "call" is (`3*N + 2`), and problem sources |
+| [Lean 4 Core Guide](docs/LEAN4_GUIDE.md) | Automatic `lean` detection, `sorry`/`admit` guard, and runnable pure Lean 4 examples |
+| [Lake & Mathlib Guide](docs/LAKE_AND_MATHLIB.md) | `lake` setup, `mathlib-lab` with `lake exe cache get`, `Lake Project Dir`, and Lake project export |
+| [CLI, MCP & Launchers](docs/CLI_AND_MCP.md) | All CLI subcommands, 15 MCP `2026-07-28` tools, and `start.bat`/`start.ps1` |
+| [HELP.md](HELP.md) | Quick in-repo reference mirroring the 7-tab in-app Help Center |
+
+## Architecture
+
+- **`crates/proofcraft-core` (L1):** SQLite Record & Verified Ledger, independent Summarizer briefings, Prover + Two-Tier Adversarial Verifier loop, Isolated Lemma Auditor, non-mathematical Process Advisor, live LLM discovery, online importer + curated packs, hard call/round/USD budget caps, and Lean 4 / Lake verification.
+- **`crates/proofcraft-mcp` (L2):** `clap` CLI and pure-Rust MCP `2026-07-28` stdio server (`proofcraft-mcp mcp`, 15 tools + `skill://proofcraft/SKILL.md`).
+- **`crates/proofcraft-app` (L3):** Native `eframe`/`egui 0.37` desktop studio with Kanban board, animated 8-stage Cogentic + Lean 4 loop visualizer, round telemetry chart, 3 high-contrast skins (Obsidian Dark, Crisp Light, Ivory Proof), Copilot dock, 7-tab Help Center, and full-window Settings (`Ctrl+,`).
+
+## Feature Matrix
+
+| Feature | Status | Notes |
+|---|---|---|
+| Kanban Pipeline Board + `PAPER DEMO` vs `LOCAL` badges | `Implemented` | Queued, In Progress, Verified, Budget Cap |
+| Animated 8-Stage Cogentic + Lean 4 Loop & Telemetry Chart | `Implemented` | Live pulse during rounds + Play/Pause replay |
+| Two-Tier Adversarial Verification + Isolated Lemma Auditor | `Implemented` | Individual + Comparative verifiers + Dead Ends |
+| Lean 4 Formal Verification (`lean --stdin` + `sorry` guard) | `Implemented` | Rejects `sorry`/`admit`; one-click & auto-formalize |
+| Lake / Mathlib Workspace Support & Lake Project Export | `Implemented` | `lake env lean --stdin` + `lakefile.toml` export |
+| Online Problem Importer (`arXiv`, `erdosproblems.com`, `.lean`) & Packs | `Implemented` | Warmup, Erdos, and Cogentic packs |
+| Live LLM Discovery & Hybrid Role Routing (Ollama/LM Studio/APIs) | `Implemented` | Excludes embed-only models; masked key status |
+| Pure-Rust CLI & MCP Stdio (`2026-07-28`, 15 tools) | `Implemented` | `proofcraft-mcp mcp` + `skill://` resource |
+| Native `egui` Studio (3 skins, Copilot, 7-Tab Help, Settings, `.tex`/`.md`) | `Implemented` | `--smoke-test` + headless `egui` frame tests |
 
 ## License
 
