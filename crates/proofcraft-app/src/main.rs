@@ -702,4 +702,107 @@ mod tests {
         assert!(light.bg.r() > 200);
         assert!(ivory.bg.r() > 200);
     }
+
+    #[test]
+    fn headless_egui_renders_all_tabs_and_skins_without_panic() {
+        let store = ProofStore::open_in_memory().expect("db");
+        store.load_embedded_seed().expect("seed");
+        let detail = store
+            .get_problem_detail("prob-anytime-experts")
+            .expect("detail");
+        let provider = ProviderConfig::default();
+        let routing = RoleRouting::default();
+        let budget = BudgetConfig::default();
+
+        for skin in Skin::ALL {
+            let prefs = UiPrefs {
+                skin,
+                zoom_factor: 1.0,
+                show_tab_bar: true,
+            };
+            let ctx = egui::Context::default();
+            apply_skin(&ctx, &prefs);
+            let pal = palette(skin);
+            let mut dir_name = String::new();
+            let mut dir_claim = String::new();
+            let mut arxiv_id = String::new();
+            let mut lean_code = "theorem x : 1 = 1 := rfl".to_string();
+            let mut lean_out = String::new();
+            let mut status_msg = String::new();
+            let mut export_tex = false;
+            let mut help_tab = HelpTab::GetStarted;
+            let mut settings_sec = SettingsSection::Appearance;
+            let mut prefs_mut = prefs.clone();
+            let mut prov_mut = provider.clone();
+            let mut rout_mut = routing.clone();
+            let mut bud_mut = budget.clone();
+            let mut disc = None;
+
+            let mut full_output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                render_workspace(
+                    ui,
+                    &pal,
+                    &detail,
+                    &mut dir_name,
+                    &mut dir_claim,
+                    &mut arxiv_id,
+                    &store,
+                    &mut status_msg,
+                );
+                render_rounds(ui, &pal, &detail);
+                render_ledger(
+                    ui,
+                    &pal,
+                    &detail,
+                    &mut lean_code,
+                    &mut lean_out,
+                    &store,
+                    &prov_mut,
+                    &rout_mut,
+                    &bud_mut,
+                    &mut status_msg,
+                );
+                render_advisor(ui, &pal, &detail);
+                render_manuscript(
+                    ui,
+                    &pal,
+                    &store,
+                    &detail.problem.id,
+                    &mut export_tex,
+                    &mut status_msg,
+                );
+                render_help(ui, &pal, &mut help_tab);
+                render_settings(
+                    ui,
+                    &pal,
+                    &mut settings_sec,
+                    &mut prefs_mut,
+                    &mut prov_mut,
+                    &mut rout_mut,
+                    &mut bud_mut,
+                    &mut disc,
+                    &store,
+                    &mut status_msg,
+                );
+            });
+            full_output.textures_delta.clear();
+        }
+    }
+
+    #[test]
+    fn ui_source_has_no_em_dash_or_tofu_glyphs() {
+        let sources = [
+            include_str!("main.rs"),
+            include_str!("views.rs"),
+            include_str!("theme.rs"),
+        ];
+        for src in sources {
+            assert!(!src.contains('\u{2014}'), "em dash found in UI source");
+            assert!(!src.contains('\u{25A1}'), "tofu glyph found in UI source");
+            assert!(
+                !src.contains('\u{FFFD}'),
+                "replacement char found in UI source"
+            );
+        }
+    }
 }
