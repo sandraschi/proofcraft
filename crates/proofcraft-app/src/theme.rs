@@ -136,5 +136,5 @@ pub fn apply_skin(ctx: &egui::Context, prefs: &UiPrefs) {
     visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, pal.border);
     visuals.selection.bg_fill = pal.accent.linear_multiply(0.35);
     ctx.set_visuals(visuals);
-    ctx.set_pixels_per_point(prefs.zoom_factor.clamp(0.75, 2.0));
+    ctx.set_zoom_factor(prefs.zoom_factor.clamp(0.75, 2.0));
 }

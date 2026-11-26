@@ -59,7 +59,20 @@ fn run_smoke_test() -> i32 {
     0
 }
 
+fn install_crash_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        let msg = format!("proofcraft-app panic: {info}\n");
+        eprintln!("{msg}");
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let dir = PathBuf::from(local).join("proofcraft");
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(dir.join("crash.log"), &msg);
+        }
+    }));
+}
+
 fn main() {
+    install_crash_hook();
     if std::env::args().any(|a| a == "--smoke-test") {
         std::process::exit(run_smoke_test());
     }
@@ -516,7 +529,7 @@ impl eframe::App for ProofCraftApp {
                     );
                     ui.separator();
                     egui::ScrollArea::vertical()
-                        .max_height(ui.available_height() - 90.0)
+                        .max_height((ui.available_height() - 90.0).max(60.0))
                         .show(ui, |ui| {
                             for (role, text) in &self.copilot_messages {
                                 ui.label(RichText::new(role).strong().color(pal.accent));
